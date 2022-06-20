@@ -1,0 +1,10 @@
+artype,norsk,english,teotil
+10,Bebygd,Urban,urban
+20,Jordbruk,Agricultural,agri
+30,Skog,Forest,wood
+50,Snaumark,Semi-natural,upland
+60,Myr,Marsh,upland
+70,Bre,Glacier,glacier
+81,Ferskvann,Freshwater,lake
+82,Hav,Sea,sea
+99,Ikke kartlagt,Not mapped,other
