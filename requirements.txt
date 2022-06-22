@@ -1,0 +1,7 @@
+contextily
+geopandas
+graphviz
+matplotlib
+networkx
+numpy
+pandas
