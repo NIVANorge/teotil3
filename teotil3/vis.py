@@ -5,7 +5,7 @@ import networkx as nx
 import pandas as pd
 
 
-def plot_network(g, catch_id, direct="down", stat="local", quant="a_reg_land_km2"):
+def plot_network(g, catch_id, direct="down", stat="local", quant="a_cat_land_km2"):
     """Create schematic diagram upstream or downstream of a specified node.
 
     Args
@@ -14,7 +14,7 @@ def plot_network(g, catch_id, direct="down", stat="local", quant="a_reg_land_km2
         catch_id: Str. Catchment ID of interest
         direct:   Str. Default 'down'. 'up' or 'down'. Direction to trace network
         stat:     Str. Default 'local'. 'local' or 'accum'. Type of results to display
-        quant:    Str. Default 'a_reg_land_km2'. Any of the returned result types
+        quant:    Str. Default 'a_cat_land_km2'. Any of the returned result types
 
     Returns
         Graphviz image object.

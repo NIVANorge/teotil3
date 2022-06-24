@@ -31,7 +31,7 @@ def summarise_regine_hydrology(reg_gdf):
     reg_gdf.rename(
         {
             "vassdragsnummer": "regine",
-            "regineAreal_km2": "a_reg_land_km2",  # NOTE: This is the land area in each regine, not necessarily the polygon area
+            "regineAreal_km2": "a_cat_land_km2",  # NOTE: This is the land area in each regine, not necessarily the polygon area
             "nedborfeltOppstromAreal_km2": "upstr_a_km2",
             "QNedborfeltOppstrom_Mm3Aar": "upstr_runoff_Mm3/yr",
         },
@@ -40,9 +40,9 @@ def summarise_regine_hydrology(reg_gdf):
     )
 
     # Calculate derived columns
-    reg_gdf["a_reg_poly_km2"] = reg_gdf.to_crs({"proj": "cea"})["geometry"].area / 1e6
+    reg_gdf["a_cat_poly_km2"] = reg_gdf.to_crs({"proj": "cea"})["geometry"].area / 1e6
     reg_gdf["q_sp_m3/s/km2"] = reg_gdf["QNormalr6190_lskm2"] / 1000
-    reg_gdf["q_reg_m3/s"] = reg_gdf["q_sp_m3/s/km2"] * reg_gdf["a_reg_land_km2"]
+    reg_gdf["q_cat_m3/s"] = reg_gdf["q_sp_m3/s/km2"] * reg_gdf["a_cat_land_km2"]
     reg_gdf["runoff_mm/yr"] = reg_gdf["q_sp_m3/s/km2"] * 60 * 60 * 24 * 365.25 / 1000
 
     # Remove Svalbard
@@ -53,13 +53,13 @@ def summarise_regine_hydrology(reg_gdf):
     # Get cols of interest
     reg_cols = [
         "regine",
-        "a_reg_land_km2",
-        "a_reg_poly_km2",
+        "a_cat_land_km2",
+        "a_cat_poly_km2",
         "upstr_a_km2",
         "upstr_runoff_Mm3/yr",
         "q_sp_m3/s/km2",
         "runoff_mm/yr",
-        "q_reg_m3/s",
+        "q_cat_m3/s",
         "vassom",
         "geometry",
     ]
@@ -212,7 +212,7 @@ def calculate_ar50_land_cover_proportions(
     # Some regines lie wholly or partially outside Norway/AR50. These parts should
     # be considered 100% 'other'
     reg_gdf["a_other_km2"] = (
-        reg_gdf["a_reg_poly_km2"]
+        reg_gdf["a_cat_poly_km2"]
         - reg_gdf["a_agri_km2"]
         - reg_gdf["a_glacier_km2"]
         - reg_gdf["a_lake_km2"]
@@ -339,10 +339,10 @@ def assign_regine_hierarchy(
     df,
     regine_col="regine",
     regine_down_col="regine_down",
-    order_coastal=False,
-    nan_to_vass=True,
+    order_coastal=True,
+    nan_to_vass=False,
     land_to_vass=False,
-    add_offshore=True,
+    add_offshore=False,
 ):
     """Determine hydrological ordering of regine catchments based on
     catchment IDs. See
@@ -351,34 +351,37 @@ def assign_regine_hierarchy(
 
     for an overview of the regine coding scheme.
 
+    The default parameters aim to reproduce the behaviour of the original
+    model, but are not necessarily the best choices in most cases.
+
     Args
         df:              (Geo)Dataframe of regine data
         regine_col:      Str. Default 'regine'. Name of column in 'df'
                          containing the regine IDs
         regine_down_col: Str. Default 'regine_down'. Name of new column to be
                          created to store the next down IDs
-        order_coastal:   Bool. Default False. If True, coastal catchments will
+        order_coastal:   Bool. Default True. If True, coastal catchments will
                          be ordered hierarchically, as in the original TEOTIL
                          model (e.g. '001.6' flows into '001.5', which flows
                          into '001.4' etc.). In most cases this does not make
                          sense, as the numbering of kystfelt does not reflect
-                         dominant circulation patterns. If False (the default)
-                         all kystfelt are assigned directly to the main
-                         vassdragsområde (e.g. '001.6', '001.5' and '001.4'
-                         would all flow into '001.')
-        nan_to_vass:     Bool. Default True. Whether catchments for which no
+                         dominant circulation patterns. If False all kystfelt
+                         are assigned directly to the main vassdragsområde
+                         (e.g. '001.6', '001.5' and '001.4' would all flow
+                         into '001.')
+        nan_to_vass:     Bool. Default False. Whether catchments for which no
                          downstream ID can be identified should be assigned
                          directly to the parent vassdragsområde. In some areas -
                          notably catchments in the east draining to Sweden - the
                          regines are truncated mid-catchment. There is therefore
                          no valid downstream catchment. For completeness, it is
-                         useful to assign these catchments to the parent
+                         often useful to assign these catchments to the parent
                          vassdragsområde, rather than leaving them as NaN. This
                          behaviour can be disabled by setting 'nan_to_vass' to
                          False. If True, a warning will be printed if NaNs are
                          filled for any catchments other than those draining to
                          Sweden (vassdragsområder 301 to 315)
-        land_to_vass:    Bool. Default False. Whether downstream-most non-coastal
+        land_to_vass:    Bool. Default False. Whether downstream non-coastal
                          catchments should be linked directly to the parent
                          vassdragsområde, or to the highest ranking kystfelt. In
                          the original TEOTIL model, terrestrial catchments are
@@ -388,14 +391,14 @@ def assign_regine_hierarchy(
                          directly to the vassdragområder, which is simpler but
                          may give misleading results for some kystfelt with large
                          river mouths. If 'order_coastal' is True, 'land_to_vass'
-                         must be False and catchments will be arranged as for the
-                         original model. If 'order_coastal' is False, you can use
+                         must be False. Catchments will then be arranged as for
+                         the original model. If 'order_coastal' is False, use
                          this kwarg to control whether the algorithm links
                          terrestrial fluxes to kystfelt, or directly to the parent
                          vassdragområde
-        add_offshore:    Bool. Default True. Whether to add additional rows
-                         extending the hierarchy offshore to OSPAR areas based
-                         on data hosted on GitHub
+        add_offshore:    Bool. Default False. Whether to add additional rows
+                         extending the hierarchy offshore to OSPAR areas (based
+                         on data hosted on GitHub)
 
     Returns
         (Geo)Dataframe. Copy of 'df' with two new columns added. The first is
