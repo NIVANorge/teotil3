@@ -4,7 +4,7 @@ TEOTIL is a simple, export-coefficient-based model for estimating riverine fluxe
 
 ## Source code
 
-The model code itself is [here](https://github.com/NIVANorge/teotil3/tree/main/teotil3)
+The model code itself is [here](https://github.com/NIVANorge/teotil3/tree/main/teotil3).
 
 ## Tutorials
 
