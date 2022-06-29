@@ -5,22 +5,32 @@ import networkx as nx
 import pandas as pd
 
 
-def plot_network(g, catch_id, direct="down", stat="local", quant="a_cat_land_km2"):
+def plot_network(
+    g, catch_id, direct="down", stat="local", quant="a_cat_land_km2", image_path=None
+):
     """Create schematic diagram upstream or downstream of a specified node.
 
     Args
-        g:        NetworkX graph object returned by other TEOTIL functions (e.g.
-                  'teo.model.build_graph' or 'teo.model.run_model')
-        catch_id: Str. Catchment ID of interest
-        direct:   Str. Default 'down'. 'up' or 'down'. Direction to trace network
-        stat:     Str. Default 'local'. 'local' or 'accum'. Type of results to display
-        quant:    Str. Default 'a_cat_land_km2'. Any of the returned result types
+        g:          NetworkX graph object returned by other TEOTIL functions (e.g.
+                    'teo.model.build_graph' or 'teo.model.run_model')
+        catch_id:   Str. Catchment ID of interest
+        direct:     Str. Default 'down'. 'up' or 'down'. Direction to trace network
+        stat:       Str. Default 'local'. 'local' or 'accum'. Type of results to
+                    display
+        quant:      Str. Default 'a_cat_land_km2'. Any of the returned result types
+        image_path: Str. Optional. Default None. Save the network to disk. The file
+                    extension must be '.pdf' or '.png'
 
     Returns
         Graphviz image object.
     """
     assert direct in ("up", "down"), "'direct' must be either 'up' or 'down'"
     assert stat in ("local", "accum"), "'stat' must be either 'local' or 'accum'"
+    if image_path:
+        assert image_path[-4:] in (
+            ".png",
+            ".pdf",
+        ), "'image_path' must end in '.png' or '.pdf'."
 
     # Parse direction
     if direct == "down":
@@ -42,8 +52,12 @@ def plot_network(g, catch_id, direct="down", stat="local", quant="a_cat_land_km2
     # Draw
     res = nx.nx_agraph.to_agraph(g2)
     res.layout("dot")
+    res = graphviz.Source(res.to_string())
 
-    return graphviz.Source(res.to_string())
+    if image_path:
+        res.render(outfile=image_path)
+
+    return res
 
 
 def plot_catchment(
