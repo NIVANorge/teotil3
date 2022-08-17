@@ -53,7 +53,7 @@ def run_model(data, id_col="regine", next_down_col="regine_down"):
                        The following columns are mandatory:
 
                            [id_col, next_down_col, "a_cat_land_km2",
-                            "runoff_mm/yr", "q_cat_m3/s", "vol_lake_m3"]
+                            "runoff_mm/yr", "q_cat_m3/s"]
 
                        Additional columns to be accumulated must be named
                        '{source}_{par}_{unit}', all in lowercase e.g.
@@ -84,7 +84,6 @@ def run_model(data, id_col="regine", next_down_col="regine_down"):
         "a_cat_land_km2",
         "runoff_mm/yr",
         "q_cat_m3/s",
-        "vol_lake_m3",
     ]
     for col in req_cols:
         assert col in df.columns, f"'data' must contain a column named '{col}'."
