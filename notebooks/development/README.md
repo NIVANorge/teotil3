@@ -11,3 +11,7 @@ Data processing and intermediate analysis for developing TEOTIL3.
 
  * [Notebook 2.2: Generate catchment hierarchy](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-2_catchment_hierarchy.ipynb)
 
+### Task 2.4: Estimate residence times
+
+ * [Notebook 2.4a: Estimate lake volumes](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-4a_estimate_lake_volumes.ipynb)
+ * [Notebook 2.4b: Estimate flow rates](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-4b_estimate_residence_times.ipynb)
