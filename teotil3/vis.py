@@ -61,7 +61,13 @@ def plot_network(
 
 
 def plot_catchment(
-    g, catch_id, cat_gdf, id_col="regine", include_connected=False, direct="up"
+    g,
+    catch_id,
+    cat_gdf,
+    id_col="regine",
+    include_connected=False,
+    direct="up",
+    basemap="kartverket",
 ):
     """Create a map showing the catchment boundary overlaid on a simple basemap.
 
@@ -80,6 +86,14 @@ def plot_catchment(
         direct:            Str. Default 'up'. 'up' or 'down'. Direction in which
                            to trace network and merge catchments. Ignored unless
                            'include_connected' is True
+        basemap:           Str or Obj. Default 'kartverket'. If str, must be either
+                           'kartverket' or a valid WMS tile URL (e.g.
+                           https://cache.kartverket.no/topo4/v1/gmaps/{z}/{x}/{y}.png)
+                           that will be passed as the 'source' argument to
+                           contextily's 'add_basemap' function. If obj, must be a
+                           valid contextily provider object (see
+                           https://contextily.readthedocs.io/en/latest/intro_guide.html#Providers
+                           for details).
 
     Returns
         Tuple (gdf, matplotlib_axis), where 'gdf' is a geodataframe containing
@@ -90,6 +104,9 @@ def plot_catchment(
     assert isinstance(
         include_connected, bool
     ), "'include_connected' must be either True or False."
+
+    if basemap == "kartverket":
+        basemap = "https://cache.kartverket.no/topo4/v1/gmaps/{z}/{x}/{y}.png"
 
     if include_connected:
         if direct == "down":
@@ -114,7 +131,7 @@ def plot_catchment(
         ax,
         crs=gdf.crs.to_string(),
         attribution=False,
-        source=cx.providers.OpenStreetMap.Mapnik,
+        source=basemap,
     )
     ax.set_axis_off()
 
