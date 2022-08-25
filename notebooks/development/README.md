@@ -15,3 +15,7 @@ Data processing and intermediate analysis for developing TEOTIL3.
 
  * [Notebook 2.4a: Estimate lake volumes](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-4a_estimate_lake_volumes.ipynb)
  * [Notebook 2.4b: Estimate flow rates](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-4b_estimate_residence_times.ipynb)
+ 
+### Task 2.5: Estimating retention
+
+ * [Notebook 2.5: Estimating retention](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5_retention_coefficients.ipynb)
