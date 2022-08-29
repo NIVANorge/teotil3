@@ -1,7 +1,9 @@
 import contextily as cx
 import geopandas as gpd
 import graphviz
+import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 import pandas as pd
 
 
@@ -136,3 +138,95 @@ def plot_catchment(
     ax.set_axis_off()
 
     return (gdf, ax)
+
+
+def choropleth_map(
+    g,
+    cat_gdf,
+    id_col="regine",
+    stat="accum",
+    quant="q_m3/s",
+    trans="none",
+    cmap="viridis",
+    scheme="quantiles",
+    n_classes=10,
+    figsize=(8, 12),
+    plot_path=None,
+    ax=None,
+):
+    """Display a map of the regine catchments, coloured according
+    to the quantity specified.
+    Args:
+        g          NetworkX graph object returned by teo.run_model()
+        cat_gdf:   Geodataframe. Polygons representing catchments
+        id_col:    Str. Name of column identifying unique catchments in 'cat_gdf' and
+                   nodes in 'g'
+        stat:      Str. 'local' or 'accum'. Type of results to display
+        quant:     Str. Any of the returned result types
+        trans:     Str. One of ['none', 'log', 'sqrt']. Whether to transform 'quant'
+                   before plotting
+        cmap:      Str. Valid matplotlib colourmap
+        scheme:    Str. Valid map classify scheme name. See here for details:
+                       https://github.com/pysal/mapclassify
+        n_classes: Int. Number of classes in 'scheme'. Corresponds to parameter 'k' here:
+                       https://github.com/pysal/mapclassify
+        figsize:   Tuple. Figure (width, height) in inches. Ignored if 'ax' is specified
+        plot_path: Raw Str. Optional. Path to which plot will be saved
+        ax:        Matplotlib axis or None. Default None. Existing axis on which to
+                   draw the plot, if desired
+    Returns:
+        None
+    """
+    assert id_col in cat_gdf.columns, "'id_col' not found in 'cat_gdf'."
+    assert stat in ["local", "accum"], "'stat' must be either 'local' or 'accum'."
+
+    # Extract data of interest from graph
+    cat_list = []
+    val_list = []
+    for nd in list(nx.topological_sort(g))[:-1]:
+        cat_list.append(g.nodes[nd]["local"][id_col])
+        val_list.append(g.nodes[nd][stat][quant])
+
+    df = pd.DataFrame(data={quant: val_list, id_col: cat_list})
+
+    # Map title
+    stat = stat.capitalize()
+    tit = quant.split("_")
+    name = " ".join(tit[:-1]).capitalize()
+    unit = tit[-1]
+
+    # Transform if necessary
+    if trans == "none":
+        tit = f"{stat} {name} ({unit})"
+    elif trans == "log":
+        tit = f"log[{stat} {name} ({unit})]"
+        df[quant] = np.log10(df[quant])
+    elif trans == "sqrt":
+        tit = f"sqrt[{stat} {name} ({unit})]"
+        df[quant] = df[quant] ** 0.5
+    else:
+        raise ValueError("'trans' must be one of ['none', 'log', 'sqrt'].")
+
+    # Join catchments
+    cat_gdf = cat_gdf[[id_col, cat_gdf.geometry.name]].copy()
+    gdf = cat_gdf.merge(df, on=id_col)
+    gdf.dropna(subset=cat_gdf.geometry.name, inplace=True)
+
+    # Plot
+    ax = gdf.plot(
+        column=quant,
+        legend=True,
+        scheme=scheme,
+        edgecolor="face",
+        figsize=figsize,
+        cmap=cmap,
+        legend_kwds={"loc": "upper left"},
+        classification_kwds={"k": n_classes},
+        ax=ax,
+    )
+    ax.set_title(tit, fontsize=20)
+    ax.axis("off")
+
+    # Save
+    if plot_path:
+        plt.savefig(plot_path, dpi=300)
