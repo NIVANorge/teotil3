@@ -7,7 +7,7 @@ import pandas as pd
 
 def summarise_regine_hydrology(reg_gdf):
     """Summarise basic, regine-level hydrology information. Note that this
-    function hard-codes column names as currently used by NVE in thier FGDB
+    function hard-codes column names as currently used by NVE in their FGDB
     version of the regine dataset. These names are defined in NVE's metadata
     and should not change in the future, but if they do this function will
     need updating/generalising. Note also that names are different in e.g.
@@ -516,4 +516,131 @@ def assign_regine_hierarchy(
     pct_filled = 100 * df[regine_down_col].count() / len(df)
     print(f"{pct_filled:.2f} % of regines assigned.")
 
+    # Fill NaN
+    for col in df.columns:
+        if col not in (regine_col, regine_down_col, "geometry"):
+            if col.split("_")[0] == "trans":
+                df[col].fillna(1, inplace=True)
+            else:
+                df[col].fillna(0, inplace=True)
+
     return df
+
+
+def calculate_lake_retention_vollenweider(df, res_time_col, par_name, sigma, n):
+    """Calculate retention and transmission factors for individual lakes
+    according to Vollenweider (1975).
+
+        R = sigma / (sigma + rho^n)
+
+    where rho is the reciprocal of the residence time (in years), and
+    sigma and n are parameter-specific constants. See
+
+    https://niva.brage.unit.no/niva-xmlui/bitstream/handle/11250/2985726/7726-2022%2bhigh.pdf?sequence=1&isAllowed=y#page=23
+
+    for details.
+
+    Args
+        df:           Obj. Dataframe of lake data
+        res_time_col: Str. Column name in 'df' containing water residence
+                      times (in years)
+        par_name:     Str. Name for parameter
+        sigma:        Int or Float. Parameter-specific constant. Must be
+                      positive
+        n:            Int or Float. Parameter-specific exponent. Must be
+                      positive
+
+    Returns
+        Dataframe. 'df' is returned with two new columns added: 'trans_par'
+        and 'ret_par', where 'par' is the 'par_name' provided.
+    """
+    assert res_time_col in df.columns, "'res_time_col' not found in 'df'."
+    assert sigma > 0, "'sigma' must be positive."
+    assert n > 0, "'n' must be positive."
+
+    df[f"ret_{par_name}"] = sigma / (sigma + ((1 / df[res_time_col]) ** n))
+    df[f"trans_{par_name}"] = 1 - df[f"ret_{par_name}"]
+
+    return df
+
+
+def calculate_regine_retention(df, regine_col, pars):
+    """Aggregate lake retention factors to regine level by combining in
+    series. See
+
+    https://niva.brage.unit.no/niva-xmlui/bitstream/handle/11250/2985726/7726-2022%2bhigh.pdf?sequence=1&isAllowed=y#page=23
+
+    for details.
+
+    Args
+        df:         Dataframe of lake retention data. Must contain cols
+                    'trans_par' for all 'pars'
+        regine_col: Str. Column name in 'df' with regine codes for
+                    aggregation
+        pars:       List of str. Parameters to aggregate
+
+    Retruns
+        Dataframe with columns [regine, trans_par, ret_par] for all
+        parameters in 'pars'.
+    """
+    assert regine_col in df.columns, "'regine_col' not found in 'df'."
+    trans_cols = [f"trans_{par}" for par in pars]
+    for col in trans_cols:
+        assert col in df.columns, f"'{col}' not found in 'df'."
+
+    reg_df = df.groupby(regine_col).prod()[trans_cols].reset_index()
+    for par in pars:
+        reg_df[f"ret_{par}"] = 1 - reg_df[f"trans_{par}"]
+
+    return reg_df
+
+
+def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
+    """Assign retention and transmission coefficients to each regine.
+
+    Args
+        reg_gdf:    Geodataframe of regine boundaries from NVE.
+        regine_col: Str. Name of column in reg_gdf with regine codes
+        dtm_res:    Int. Resolution in file name of CSV with residence times
+
+    Returns
+        Copy of 'reg_gdf' with retention and transmission columns added
+        for each parameter.
+    """
+    reg_gdf = reg_gdf.copy()
+
+    # Get lake residence times
+    res_csv = f"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/lake_residence_times_{dtm_res}m_dem.csv"
+    df = pd.read_csv(res_csv)
+
+    # Vollenweider parameters for individual lakes
+    # par_name: (sigma, n)
+    voll_dict = {
+        "orig-totp": (1, 0.5),
+    }
+    for par in voll_dict.keys():
+        sigma, n = voll_dict[par]
+        df = calculate_lake_retention_vollenweider(
+            df, "res_time_yr", par, sigma=1, n=0.5
+        )
+
+    # Non-Vollenweider params for individual lakes
+    # Original ret_n assumed to be 0.2*ret_p
+    df["ret_orig-totn"] = 0.2 * df["ret_orig-totp"]
+    df["trans_orig-totn"] = 1 - df["ret_orig-totn"]
+
+    # Aggregate to regine level
+    pars = [col[6:] for col in df.columns if col.startswith("trans_")]
+    reg_df = calculate_regine_retention(df, regine_col=regine_col, pars=pars)
+
+    reg_gdf = reg_gdf.merge(reg_df, on=regine_col, how="left")
+
+    for col in reg_gdf.columns:
+        if col.startswith("ret_"):
+            reg_gdf[col].fillna(0, inplace=True)
+        elif col.startswith("trans_"):
+            reg_gdf[col].fillna(1, inplace=True)
+        else:
+            pass
+
+    return reg_gdf
