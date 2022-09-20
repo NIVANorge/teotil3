@@ -1,8 +1,10 @@
+import os
 import re
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from sqlalchemy import text
 
 
 def summarise_regine_hydrology(reg_gdf):
@@ -231,6 +233,12 @@ def calculate_ar50_land_cover_proportions(
         + reg_gdf["a_urban_km2"]
         + reg_gdf["a_wood_km2"]
     )
+
+    # Ensure all area cols are consistent
+    reg_gdf["a_cat_poly_km2"] = (
+        reg_gdf["ar50_tot_a_km2"] + reg_gdf["a_sea_km2"] + reg_gdf["a_other_km2"]
+    )
+    reg_gdf["a_cat_land_km2"] = reg_gdf["a_cat_poly_km2"] - reg_gdf["a_sea_km2"]
 
     # Move 'geometry' to end
     cols = reg_gdf.columns.tolist()
@@ -621,7 +629,7 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     for par in voll_dict.keys():
         sigma, n = voll_dict[par]
         df = calculate_lake_retention_vollenweider(
-            df, "res_time_yr", par, sigma=1, n=0.5
+            df, "res_time_yr", par, sigma=sigma, n=n
         )
 
     # Non-Vollenweider params for individual lakes
@@ -642,5 +650,292 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
             reg_gdf[col].fillna(1, inplace=True)
         else:
             pass
+
+    return reg_gdf
+
+
+def get_regine_geodataframe(engine, year, regine_year=2022):
+    """Get the regine catchment polygons and basic attributes as a geodataframe.
+
+    Args
+        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3'
+                     database
+        year:        Int. Year of interest
+        regine_year: Int. Year when regine dataset was downloaded
+
+    Returns
+        Geodataframe.
+    """
+    sql = text(f"SELECT * FROM teotil3.regine_{regine_year} ORDER BY regine")
+    gdf = gpd.read_postgis(sql, engine)
+
+    # Delete irrelevant columns and tidy
+    del gdf["upstr_a_km2"], gdf["upstr_runoff_Mm3/yr"]
+    for col in gdf.columns:
+        if col.startswith("fylnr") or col.startswith("komnr"):
+            if not col.endswith(str(year)):
+                del gdf[col]
+
+    gdf.rename(
+        {f"fylnr_{year}": "fylnr", f"komnr_{year}": "komnr", "geom": "geometry"},
+        axis="columns",
+        inplace=True,
+    )
+
+    return gdf
+
+
+def get_annual_vassdrag_mean_flows(data_supply_year, year, engine):
+    """Get mean annual flow data for NVE's vassdragområder based on modelled output from HBV.
+
+    Args
+        data_supply_year: Int. Year of data delivery from NVE. NVE supplies complete data
+                          from 1990 to present each year. The historic values change slightly
+                          as NVE update their models and input data. This argument specifies
+                          the NVE dataset to be used
+        year:             Int. Year of interest
+        engine:           SQL-Alchemy 'engine' object already connected to the 'teotil3'
+                          database
+
+    Returns
+        Dataframe
+    """
+    sql = text(
+        "SELECT vassom, "
+        '    AVG("flow_m3/s") AS "ann_flow_m3/s" '
+        "FROM teotil3.nve_hbv_discharge "
+        "WHERE data_supply_year = :data_supply_year "
+        "    AND TO_CHAR(date, 'YYYY') = :year "
+        "GROUP BY vassom "
+        "ORDER BY vassom"
+    )
+    param_dict = {"data_supply_year": data_supply_year, "year": str(year)}
+    df = pd.read_sql(sql, engine, params=param_dict)
+
+    assert len(df) == 261, "Data are missing for some vassdragsområder."
+
+    return df
+
+
+def get_background_coefficients(engine, year, regine_year=2022):
+    """Read the static, spatially variable and spatio-temporally variable background
+    coefficents and join to a single dataframe.
+
+    Args
+        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3'
+                     database
+        year:        Int. Year of interest
+        regine_year: Int. Year defining regine dataset on which coefficients are based
+
+    Returns
+        Dataframe.
+    """
+    # Read background coefficients
+    sql = text(
+        f"SELECT * FROM teotil3.spatially_static_background_coefficients_{regine_year}"
+    )
+    static_df = pd.read_sql(sql, engine)
+
+    sql = text(
+        f"SELECT * FROM teotil3.spatially_variable_background_coefficients_{regine_year}"
+    )
+    spatial_df = pd.read_sql(sql, engine)
+
+    sql = text(
+        f'SELECT regine, "{year}_lake_din_kg/km2" AS "lake_din_kg/km2" '
+        f"FROM teotil3.spatiotemporally_variable_background_coefficients_{regine_year}"
+    )
+    spat_temp_df = pd.read_sql(sql, engine)
+
+    # Join
+    df = pd.merge(spatial_df, spat_temp_df, on="regine", how="inner")
+    for idx, row in static_df.iterrows():
+        df[row["variable"]] = row["value"]
+
+    return df
+
+
+def rescale_annual_flows(reg_gdf, q_df):
+    """Rescales flows for each regine based on annual HBV data from NVE. 'reg_gdf' must
+    include columns named 'q_sp_m3/s/km2', 'runoff_mm/yr' and 'q_cat_m3/s', each
+    containing the average mean values for the period from 1961 to 1990 from NVE. Must
+    also include a column named 'vassom' defining the vassdragsområder.
+
+    'q_df' should contain the mean flow in each vassdragsområde for the year of interest
+    based on modelling results from NVE.
+
+    Args
+        reg_gdf: Geodataframe. Regine catchments with long-term mean flow values
+        q_df:    Dataframe. Mean flows for each vassdragsområde based on NVE's HBV model
+
+    Returns
+        Copy of 'reg_gdf' with flow-related columns modified to reflect the current year.
+        columns modified are ["q_sp_m3/s/km2", "runoff_mm/yr", "q_cat_m3/s"]
+    """
+    reg_gdf = reg_gdf.copy()
+    q_df = q_df.copy()
+
+    # Sum long-term averages to vassom level
+    lta_df = reg_gdf[["vassom", "q_cat_m3/s"]].groupby("vassom").sum().reset_index()
+    lta_df.columns = ["vassom", "q_lta_m3/s"]
+
+    # Derive correction factor for each vassdragsområde
+    q_df = pd.merge(lta_df, q_df, how="left", on="vassom")
+    q_df["q_fac"] = q_df["ann_flow_m3/s"] / q_df["q_lta_m3/s"]
+
+    # Join and tidy
+    reg_gdf = reg_gdf.merge(q_df, how="left", on="vassom")
+    for col in ["q_sp_m3/s/km2", "runoff_mm/yr", "q_cat_m3/s"]:
+        reg_gdf[col] = reg_gdf[col] * reg_gdf["q_fac"]
+        reg_gdf[col].fillna(value=0, inplace=True)
+    del reg_gdf["q_fac"], reg_gdf["ann_flow_m3/s"], reg_gdf["q_lta_m3/s"]
+
+    return reg_gdf
+
+
+def calculate_background_inputs(reg_gdf):
+    """Estimates non-agricultural diffuse inputs for each regine based on land cover, annual
+    runoff and background coefficients.
+
+    Args
+        reg_gdf: (Geo)Dataframe
+
+    Returns
+        (Geo)Dataframe. Copy of 'reg_gdf' with new columns representing inputs for each
+        parameter added and the background coefficients removed.
+    """
+    reg_gdf = reg_gdf.copy()
+    reg_gdf["q_sp_l/km2"] = reg_gdf["q_sp_m3/s/km2"] * 1000 * 60 * 60 * 24 * 365.25
+
+    # Calculations for "concentration-based" pars
+    col_list = [
+        "wood_din_µg/l",
+        "wood_totn_µg/l",
+        "wood_tdp_µg/l",
+        "wood_totp_µg/l",
+        "wood_toc_mg/l",
+        "upland_din_µg/l",
+        "upland_totn_µg/l",
+        "upland_tdp_µg/l",
+        "upland_totp_µg/l",
+        "upland_toc_mg/l",
+        "wood_ton_µg/l",
+        "wood_tpp_µg/l",
+        "upland_ton_µg/l",
+        "upland_tpp_µg/l",
+        "urban_din_µg/l",
+        "urban_ton_µg/l",
+        "urban_tdp_µg/l",
+        "urban_tpp_µg/l",
+        "urban_toc_µg/l",
+        "urban_ss_mg/l",
+    ]
+    for col in col_list:
+        lc_class, par, unit = col.split("_")
+        if unit[0] == "m":
+            unit_fac = 1e6
+        elif unit[0] == "µ":
+            unit_fac = 1e9
+        else:
+            raise ValueError(f"Could not identify correct unit factor for {unit}.")
+
+        reg_gdf[f"{lc_class}_{par}_kg"] = (
+            reg_gdf[col]
+            * reg_gdf[f"a_{lc_class}_km2"]
+            * reg_gdf["q_sp_l/km2"]
+            / unit_fac
+        )
+        del reg_gdf[col]
+    del reg_gdf["q_sp_l/km2"]
+
+    # Calculations for "area-based" pars
+    col_list = [
+        "lake_din_kg/km2",
+        "wood_ss_kg/km2",
+        "upland_ss_kg/km2",
+        "glacier_ss_kg/km2",
+    ]
+    for col in col_list:
+        lc_class, par, unit = col.split("_")
+        if unit[0] == "k":
+            unit_fac = 1
+        else:
+            raise ValueError(f"Could not identify correct unit factor for {unit}.")
+
+        reg_gdf[f"{lc_class}_{par}_kg"] = reg_gdf[col] * reg_gdf[f"a_{lc_class}_km2"]
+        del reg_gdf[col]
+
+    return reg_gdf
+
+
+def make_input_file(
+    year,
+    nve_data_year,
+    engine,
+    out_csv_fold=r"/home/jovyan/shared/teotil3/annual_input_data",
+    regine_year=2022,
+):
+    """Builds an input file for the specified year. All the required data must be uploaded to
+    the database.
+
+    Args
+        year:          Int. Year of interest
+        nve_data_year: Int. Specifies the discharge dataset to use from NVE
+        engine:        SQL-Alchemy 'engine' object already connected to the 'teotil3'
+                       database
+        out_csv_fold:  Str. Path to folder where output CSV will be created
+        regine_year:   Int. Year defining regine dataset on which coefficients are based
+
+    Returns
+        Dataframe. The CSV is written to the specified folder.
+    """
+    # Get basic datasets from database
+    reg_gdf = get_regine_geodataframe(engine, year, regine_year=regine_year)
+    back_df = get_background_coefficients(engine, year, regine_year=regine_year)
+    q_df = get_annual_vassdrag_mean_flows(nve_data_year, year, engine)
+
+    # Rescale flows
+    reg_gdf = rescale_annual_flows(reg_gdf, q_df)
+
+    # Estimate non-agricultural diffuse ("background") inputs
+    reg_gdf = reg_gdf.merge(back_df, how="left", on="regine")
+    reg_gdf = calculate_background_inputs(reg_gdf)
+
+    # Determine hydrological connectivity
+    reg_gdf = assign_regine_hierarchy(
+        reg_gdf,
+        regine_col="regine",
+        regine_down_col="regine_down",
+        nan_to_vass=True,
+        add_offshore=True,
+        order_coastal=False,
+        land_to_vass=True,
+    )
+
+    # Save relevant cols to output
+    cols_to_ignore = [
+        "a_cat_poly_km2",
+        "q_sp_m3/s/km2",
+        "vassom",
+        "ospar_region",
+        "a_agri_km2",
+        "a_glacier_km2",
+        "a_lake_km2",
+        "a_other_km2",
+        "a_sea_km2",
+        "a_upland_km2",
+        "a_urban_km2",
+        "a_wood_km2",
+        "ar50_tot_a_km2",
+        "a_lake_nve_km2",
+        "komnr",
+        "fylnr",
+        "geometry",
+    ]
+    cols = [col for col in reg_gdf.columns if col not in cols_to_ignore]
+    reg_df = reg_gdf[cols]
+    csv_name = f"teotil3_input_data_{year}_nve{nve_data_year}_regine{regine_year}.csv"
+    csv_path = os.path.join(out_csv_fold, csv_name)
+    reg_df.to_csv(csv_path, index=False)
 
     return reg_gdf
