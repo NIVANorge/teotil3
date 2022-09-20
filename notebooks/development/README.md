@@ -6,6 +6,7 @@ Data processing and intermediate analysis for developing TEOTIL3.
 
  * [Notebook 2.1a: Processing historic administrative boundaries](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1a_historic_admin_boundaries.ipynb)
  * [Notebook 2.1b: Summarise and combine regine-level data](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1b_update_core_datasets.ipynb)
+ * [Notebook 2.1c: Transfer data to PostGIS](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1b_update_core_datasets.ipynb)
  
 ### Task 2.2: Generate catchment hierarchy
 
@@ -23,4 +24,6 @@ Data processing and intermediate analysis for developing TEOTIL3.
 ### Task 2.7: Improve workflow for non-agricultural diffuse inputs
 
  * [Notebook 2.7a: The "1000 Lakes" dataset](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7a_non_agri_diffuse_inputs.ipynb)
- * [Notebook 2.7b: Spatial interpolation for "skog" and "fjell" areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7b_spatial_interpolation_skog_fjell.ipynb)
+ * [Notebook 2.7b: Spatial interpolation for woodland and upland areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7b_spatial_interpolation_skog_fjell.ipynb)
+ * [Notebook 2.7c: Inputs from urban, glacial and lake areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7c_other_background_coeffs.ipynb)
+ * [Notebook 2.7d: Exploring patterns in background inputs](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7d_explore_background_inputs.ipynb)
