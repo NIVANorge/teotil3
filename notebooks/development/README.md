@@ -21,7 +21,7 @@ Data processing and intermediate analysis for developing TEOTIL3.
 
  * [Notebook 2.5a: Estimating retention](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5a_retention_coefficients.ipynb)
  * [Notebook 2.5b: Estimating Vollenweider parameters](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5b_est_vollenweider_params_from_data.ipynb)
- * [Notebook 2.5c: Exploring retention for large catchments](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5c_explore_vassom_retention)
+ * [Notebook 2.5c: Exploring retention for large catchments](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5c_explore_vassom_retention.ipynb)
  
 ### Task 2.7: Improve workflow for non-agricultural diffuse inputs
 
