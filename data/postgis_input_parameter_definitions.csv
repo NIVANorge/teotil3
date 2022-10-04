@@ -1,0 +1,113 @@
+in_par_id,oracle_par_id,name,unit,comment
+1,83,Ammoniakk,tonnes,
+2,84,Ammoniumforbindelser,tonnes,
+3,85,Arsen,kg,
+4,49,As,g,
+5,2,As,kg,Used by industry dataset
+6,86,Biokjemisk oksygenforbruk - 5 døgn,tonnes,
+7,87,Biokjemisk oksygenforbruk - 7 døgn,tonnes,
+8,88,Bly,kg,
+9,120,BOF5,tonnes,Used by industry dataset
+10,3,BOF-5,kg,
+11,4,BOF-5,tonnes,
+12,7,BOF7,tonnes,Used by industry dataset
+13,50,Cd,g,
+14,8,Cd,kg,Used by industry dataset
+15,9,Cd,MG,
+16,51,Cd,tonnes,
+17,52,Cr,g,
+18,10,Cr,kg,Used by industry dataset
+19,11,Cr,tonnes,
+20,56,CR-TOT,g,
+21,55,CR-TOT,MG,
+22,57,CR-TOT,tonnes,
+23,58,Cu,g,
+24,15,Cu,kg,Used by industry dataset
+25,59,Cu,MG,
+26,60,Cu,tonnes,
+27,74,Cutap,kg,
+28,41,CUtap,tonnes,
+29,,DIN,kg,
+30,42,FORFORBRUK,kg,
+31,89,Fosfor total,kg,
+32,90,Fosfor total,mg,
+33,91,Fosfor total,tonnes,
+34,61,Hg,µg,
+35,62,Hg,g,
+36,16,Hg,kg,Used by industry dataset
+37,17,Hg,MG,
+38,92,Kadmium,g,
+39,93,Kadmium,kg,
+40,94,Kjemisk oksygenforbruk,tonnes,
+41,95,Kjemisk oksygenforbruk - manganmetoden,tonnes,
+42,96,Kobber,kg,
+43,18,KOF,tonnes,Used by industry dataset
+44,20,KOF-DI,tonnes,
+45,21,KOF-MN,tonnes,
+46,,KONSMENGD5BOF10,kg,Annual BOF5. Used by miljøgifter dataset
+47,,KONSMENGDKOF10,kg,Annual KOF. Used by miljøgifter dataset
+48,,KONSMENGDSS10,kg,Annual SS. Used by miljøgifter dataset
+49,,KONSMENGDTOTN10,kg,Annual TOTN. Used by miljøgifter dataset
+50,,KONSMENGDTOTP10,kg,Annual TOTP. Used by miljøgifter dataset
+51,97,Krom - Seksverdig,kg,
+52,98,Krom - Treverdig,kg,
+53,99,Krom (Total),kg,
+54,100,Kvikksølv,g,
+55,101,Kvikksølv,kg,
+56,,MILJOGIFTAS2,kg,Annual As. Used by miljøgifter dataset
+57,,MILJOGIFTCD2,kg,Annual Cd. Used by miljøgifter dataset
+58,,MILJOGIFTCR2,kg,Annual Cr. Used by miljøgifter dataset
+59,,MILJOGIFTCU2,kg,Annual Cu. Used by miljøgifter dataset
+60,,MILJOGIFTHG2,kg,Annual Hg. Used by miljøgifter dataset
+61,,MILJOGIFTNI2,kg,Annual Ni. Used by miljøgifter dataset
+62,,MILJOGIFTPB2,kg,Annual Pb. Used by miljøgifter dataset
+63,,MILJOGIFTZN2,kg,Annual Zn. Used by miljøgifter dataset
+64,44,N,kg,
+65,63,NH3,kg,
+66,22,NH3,tonnes,Used by industry dataset
+67,23,NH4-N,kg,
+68,24,NH4-N,tonnes,Used by industry dataset
+69,64,Ni,g,
+70,25,Ni,kg,Used by industry dataset
+71,65,Ni,tonnes,
+72,102,Nikkel,kg,
+73,103,Nitrogen totalt,tonnes,
+74,,NO3-N,tonnes,Used by industry dataset
+75,39,Ntap,kg,
+76,26,N-TOT,kg,
+77,27,N-TOT,tonnes,Used by industry dataset
+78,106,Organiske forbindelser totalt,tonnes,
+79,107,Orto-fosfat,tonnes,
+80,45,P,kg,
+81,66,Pb,g,
+82,28,Pb,kg,Used by industry dataset
+83,29,Pb,MG,
+84,67,Pb,tonnes,
+85,75,P-ORTO,tonnes,Used by industry dataset
+86,33,P-PO4,tonnes,
+87,40,Ptap,kg,
+88,68,P-TOT,g,
+89,34,P-TOT,kg,
+90,35,P-TOT,tonnes,Used by industry dataset
+91,113,Sink,kg,
+92,69,SS,g,
+93,46,SS,kg,
+95,70,SS,tonnes,Used by industry dataset
+96,81,S-TS,tonnes,Used by industry dataset
+97,114,Suspendert organisk stoff,tonnes,
+98,115,Suspendert stoff,kg,
+99,116,Suspendert stoff,tonnes,
+100,,TDP,kg,
+101,47,TOC,kg,
+102,71,TOC,MG,
+103,37,TOC,tonnes,Used by industry dataset
+104,,TON,kg,
+105,117,Totalt organisk karbon,kg,
+106,118,Totalt organisk karbon,tonnes,
+107,,TOTN,kg,
+108,,TOTP,kg,
+109,,TPP,kg,
+110,76,Zn,g,
+111,38,Zn,kg,Used by industry dataset
+112,73,Zn,MG,
+113,79,Zn,tonnes,
