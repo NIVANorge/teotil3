@@ -6,7 +6,8 @@ Data processing and intermediate analysis for developing TEOTIL3.
 
  * [Notebook 2.1a: Processing historic administrative boundaries](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1a_historic_admin_boundaries.ipynb)
  * [Notebook 2.1b: Summarise and combine regine-level data](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1b_update_core_datasets.ipynb)
- * [Notebook 2.1c: Transfer data to PostGIS](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1b_update_core_datasets.ipynb)
+ * [Notebook 2.1c: Transfer new datasets to PostGIS](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1c_migrate_to_postgis.ipynb)
+ * [Notebook 2.1d: Migrate old data from Oracle to PostGIS](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1d_migrate_oracle_to_postgis.ipynb)
  
 ### Task 2.2: Generate catchment hierarchy
 
