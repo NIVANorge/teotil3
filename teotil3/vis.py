@@ -153,27 +153,29 @@ def choropleth_map(
     figsize=(8, 12),
     plot_path=None,
     ax=None,
+    legend_loc="upper left",
 ):
     """Display a map of the regine catchments, coloured according
     to the quantity specified.
     Args:
-        g          NetworkX graph object returned by teo.run_model()
-        cat_gdf:   Geodataframe. Polygons representing catchments
-        id_col:    Str. Name of column identifying unique catchments in 'cat_gdf' and
-                   nodes in 'g'
-        stat:      Str. 'local' or 'accum'. Type of results to display
-        quant:     Str. Any of the returned result types
-        trans:     Str. One of ['none', 'log', 'sqrt']. Whether to transform 'quant'
-                   before plotting
-        cmap:      Str. Valid matplotlib colourmap
-        scheme:    Str. Valid map classify scheme name. See here for details:
-                       https://github.com/pysal/mapclassify
-        n_classes: Int. Number of classes in 'scheme'. Corresponds to parameter 'k' here:
-                       https://github.com/pysal/mapclassify
-        figsize:   Tuple. Figure (width, height) in inches. Ignored if 'ax' is specified
-        plot_path: Raw Str. Optional. Path to which plot will be saved
-        ax:        Matplotlib axis or None. Default None. Existing axis on which to
-                   draw the plot, if desired
+        g           NetworkX graph object returned by teo.run_model()
+        cat_gdf:    Geodataframe. Polygons representing catchments
+        id_col:     Str. Name of column identifying unique catchments in 'cat_gdf' and
+                    nodes in 'g'
+        stat:       Str. 'local' or 'accum'. Type of results to display
+        quant:      Str. Any of the returned result types
+        trans:      Str. One of ['none', 'log', 'sqrt']. Whether to transform 'quant'
+                    before plotting
+        cmap:       Str. Valid matplotlib colourmap
+        scheme:     Str. Valid map classify scheme name. See here for details:
+                        https://github.com/pysal/mapclassify
+        n_classes:  Int. Number of classes in 'scheme'. Corresponds to parameter 'k' here:
+                        https://github.com/pysal/mapclassify
+        figsize:    Tuple. Figure (width, height) in inches. Ignored if 'ax' is specified
+        plot_path:  Raw Str. Optional. Path to which plot will be saved
+        ax:         Matplotlib axis or None. Default None. Existing axis on which to
+                    draw the plot, if desired
+        legend_loc: Str. Deafault 'upper left'. Postition for legend.
     Returns:
         None
     """
@@ -209,7 +211,7 @@ def choropleth_map(
 
     # Join catchments
     cat_gdf = cat_gdf[[id_col, cat_gdf.geometry.name]].copy()
-    gdf = cat_gdf.merge(df, on=id_col)
+    gdf = pd.merge(cat_gdf, df, how="left", on=id_col)
     gdf.dropna(subset=cat_gdf.geometry.name, inplace=True)
 
     # Plot
@@ -220,7 +222,7 @@ def choropleth_map(
         edgecolor="face",
         figsize=figsize,
         cmap=cmap,
-        legend_kwds={"loc": "upper left"},
+        legend_kwds={"loc": legend_loc},
         classification_kwds={"k": n_classes},
         ax=ax,
     )
@@ -230,3 +232,5 @@ def choropleth_map(
     # Save
     if plot_path:
         plt.savefig(plot_path, dpi=300)
+
+    return ax
