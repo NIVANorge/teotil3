@@ -625,6 +625,7 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     # par_name: (sigma, n)
     voll_dict = {
         "orig-totp": (1, 0.5),
+        "totn": (0.76, 0.36),
     }
     for par in voll_dict.keys():
         sigma, n = voll_dict[par]
@@ -641,7 +642,7 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     pars = [col[6:] for col in df.columns if col.startswith("trans_")]
     reg_df = calculate_regine_retention(df, regine_col=regine_col, pars=pars)
 
-    reg_gdf = reg_gdf.merge(reg_df, on=regine_col, how="left")
+    reg_gdf = pd.merge(reg_gdf, reg_df, on=regine_col, how="left")
 
     for col in reg_gdf.columns:
         if col.startswith("ret_"):
@@ -666,6 +667,9 @@ def get_regine_geodataframe(engine, year, regine_year=2022):
     Returns
         Geodataframe.
     """
+    assert isinstance(regine_year, int), "'regine_year' must be an integer."
+    assert isinstance(year, int), "'year' must be an integer."
+
     sql = text(f"SELECT * FROM teotil3.regine_{regine_year} ORDER BY regine")
     gdf = gpd.read_postgis(sql, engine)
 
@@ -681,6 +685,7 @@ def get_regine_geodataframe(engine, year, regine_year=2022):
         axis="columns",
         inplace=True,
     )
+    gdf.set_geometry("geometry", drop=False, inplace=True)
 
     return gdf
 
@@ -700,6 +705,9 @@ def get_annual_vassdrag_mean_flows(data_supply_year, year, engine):
     Returns
         Dataframe
     """
+    assert isinstance(data_supply_year, int), "'data_supply_year' must be an integer."
+    assert isinstance(year, int), "'year' must be an integer."
+
     sql = text(
         "SELECT vassom, "
         '    AVG("flow_m3/s") AS "ann_flow_m3/s" '
@@ -730,6 +738,9 @@ def get_background_coefficients(engine, year, regine_year=2022):
     Returns
         Dataframe.
     """
+    assert isinstance(regine_year, int), "'regine_year' must be an integer."
+    assert isinstance(year, int), "'year' must be an integer."
+
     # Read background coefficients
     sql = text(
         f"SELECT * FROM teotil3.spatially_static_background_coefficients_{regine_year}"
@@ -784,7 +795,7 @@ def rescale_annual_flows(reg_gdf, q_df):
     q_df["q_fac"] = q_df["ann_flow_m3/s"] / q_df["q_lta_m3/s"]
 
     # Join and tidy
-    reg_gdf = reg_gdf.merge(q_df, how="left", on="vassom")
+    reg_gdf = pd.merge(reg_gdf, q_df, how="left", on="vassom")
     for col in ["q_sp_m3/s/km2", "runoff_mm/yr", "q_cat_m3/s"]:
         reg_gdf[col] = reg_gdf[col] * reg_gdf["q_fac"]
         reg_gdf[col].fillna(value=0, inplace=True)
@@ -872,7 +883,7 @@ def make_input_file(
     year,
     nve_data_year,
     engine,
-    out_csv_fold=r"/home/jovyan/shared/teotil3/annual_input_data",
+    out_csv_fold=None,
     regine_year=2022,
 ):
     """Builds an input file for the specified year. All the required data must be uploaded to
@@ -883,7 +894,8 @@ def make_input_file(
         nve_data_year: Int. Specifies the discharge dataset to use from NVE
         engine:        SQL-Alchemy 'engine' object already connected to the 'teotil3'
                        database
-        out_csv_fold:  Str. Path to folder where output CSV will be created
+        out_csv_fold:  None or Str. Default None. Path to folder where output CSV will be
+                       created
         regine_year:   Int. Year defining regine dataset on which coefficients are based
 
     Returns
@@ -892,14 +904,27 @@ def make_input_file(
     # Get basic datasets from database
     reg_gdf = get_regine_geodataframe(engine, year, regine_year=regine_year)
     back_df = get_background_coefficients(engine, year, regine_year=regine_year)
+    spr_df = get_annual_spredt_data(engine, year)
+    aqu_df = get_annual_point_data(engine, year, "aquaculture")
+    ind_df = get_annual_point_data(engine, year, "industry")
+    ww_df = get_annual_point_data(engine, year, "wastewater")
     q_df = get_annual_vassdrag_mean_flows(nve_data_year, year, engine)
 
     # Rescale flows
     reg_gdf = rescale_annual_flows(reg_gdf, q_df)
 
     # Estimate non-agricultural diffuse ("background") inputs
-    reg_gdf = reg_gdf.merge(back_df, how="left", on="regine")
+    reg_gdf = pd.merge(reg_gdf, back_df, how="left", on="regine")
     reg_gdf = calculate_background_inputs(reg_gdf)
+
+    # Allocate outputs from "små renseanlegg"/spredt
+    reg_gdf = assign_spredt_to_regines(reg_gdf, spr_df)
+
+    # Add point inputs
+    df_list = [reg_gdf, aqu_df, ind_df, ww_df]
+    for df in df_list:
+        df.set_index("regine", inplace=True)
+    reg_gdf = pd.concat(df_list, axis="columns").reset_index()
 
     # Determine hydrological connectivity
     reg_gdf = assign_regine_hierarchy(
@@ -912,30 +937,218 @@ def make_input_file(
         land_to_vass=True,
     )
 
-    # Save relevant cols to output
-    cols_to_ignore = [
-        "a_cat_poly_km2",
-        "q_sp_m3/s/km2",
-        "vassom",
-        "ospar_region",
-        "a_agri_km2",
-        "a_glacier_km2",
-        "a_lake_km2",
-        "a_other_km2",
-        "a_sea_km2",
-        "a_upland_km2",
-        "a_urban_km2",
-        "a_wood_km2",
-        "ar50_tot_a_km2",
-        "a_lake_nve_km2",
-        "komnr",
-        "fylnr",
-        "geometry",
-    ]
-    cols = [col for col in reg_gdf.columns if col not in cols_to_ignore]
-    reg_df = reg_gdf[cols]
-    csv_name = f"teotil3_input_data_{year}_nve{nve_data_year}_regine{regine_year}.csv"
-    csv_path = os.path.join(out_csv_fold, csv_name)
-    reg_df.to_csv(csv_path, index=False)
+    if out_csv_fold:
+        # Save relevant cols to output
+        cols_to_ignore = [
+            "a_cat_poly_km2",
+            "q_sp_m3/s/km2",
+            "vassom",
+            "ospar_region",
+            "a_agri_km2",
+            "a_glacier_km2",
+            "a_lake_km2",
+            "a_other_km2",
+            "a_sea_km2",
+            "a_upland_km2",
+            "a_urban_km2",
+            "a_wood_km2",
+            "ar50_tot_a_km2",
+            "a_lake_nve_km2",
+            "komnr",
+            "fylnr",
+            "geometry",
+        ]
+        cols = [col for col in reg_gdf.columns if col not in cols_to_ignore]
+        reg_df = reg_gdf[cols]
+        csv_name = (
+            f"teotil3_input_data_{year}_nve{nve_data_year}_regine{regine_year}.csv"
+        )
+        csv_path = os.path.join(out_csv_fold, csv_name)
+        reg_df.to_csv(csv_path, index=False)
+
+    return reg_gdf
+
+
+def get_annual_spredt_data(engine, year):
+    """Get annual 'spredt' data for each kommune. 'spredt' comprises wastewater treatment discharges
+    from sources not connected to the main sewerage network (septic tanks etc.) or from 'små anlegg'
+    sites that are too small (< 50 p.e.) to be reported individually.
+
+    Args
+        year:     Int. Year of interest
+        engine:   SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+
+    Returns
+        Dataframe of spredt data
+    """
+    assert isinstance(year, int), "'year' must be an integer."
+
+    sql = text(
+        "SELECT a.komnr, "
+        "  CONCAT_WS('_', c.name, c.unit) AS name, "
+        "  (a.value*b.factor) AS value "
+        "FROM teotil3.spredt_inputs a, "
+        "  teotil3.input_output_param_conversion b, "
+        "  teotil3.output_param_definitions c "
+        "WHERE a.in_par_id = b.in_par_id "
+        "AND b.out_par_id = c.out_par_id "
+        "AND a.year = :year"
+    )
+    df = pd.read_sql(sql, engine, params={"year": year})
+
+    if len(df) == 0:
+        print(f"    No spredt data for {year}.")
+
+        return None
+
+    else:
+        df = df.pivot(index="komnr", columns="name", values="value").copy()
+        cols = [f"spredt_{col.lower()}" for col in df.columns]
+        df.columns = cols
+        df.columns.name = ""
+        df.reset_index(inplace=True)
+
+        assert pd.isna(df).sum().sum() == 0
+
+        return df
+
+
+def get_annual_point_data(
+    engine,
+    year,
+    source_type,
+    par_list=[
+        "totn_kg",
+        "din_kg",
+        "ton_kg",
+        "totp_kg",
+        "tdp_kg",
+        "tpp_kg",
+        "toc_kg",
+        "ss_kg",
+    ],
+):
+    """Get annual data for aquaculture, industry or wasterwater treatment from the database.
+
+    Args
+        year:        Int. Year of interest
+        source_type: Str. One of ['aquaculture', 'industry', 'wastewater']
+        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        par_list:    List of parameters to consider. If None, returns data for all parameters
+                     in the database. The default is the basic set of parameters considered
+                     by TEOTIL3.
+
+    Returns
+        Dataframe of aquaculture data
+    """
+    source_type = source_type.lower()
+    assert source_type in [
+        "aquaculture",
+        "industry",
+        "wastewater",
+    ], "'source_type' must be one of ['aquaculture', 'industry', 'wastewater']."
+
+    sql = text(
+        """
+        SELECT d.regine,
+          CONCAT_WS('_', c.name, c.unit) AS name,
+          SUM(a.value * b.factor) AS value
+        FROM teotil3.point_source_values a,
+          teotil3.input_output_param_conversion b,
+          teotil3.output_param_definitions c,
+          (SELECT a.site_id,
+             a.type,
+             b.regine
+           FROM teotil3.point_source_locations a,
+             teotil3.regine_2022 b
+           WHERE ST_WITHIN(a.geom, b.geom)
+          ) d
+        WHERE a.in_par_id = b.in_par_id
+          AND b.out_par_id = c.out_par_id
+          AND a.site_id = d.site_id
+          AND a.year = :year
+          AND d.type = :source_type
+        GROUP BY d.regine,
+          c.name,
+          c.unit
+    """
+    )
+    df = pd.read_sql(
+        sql, engine, params={"year": year, "source_type": source_type.capitalize()}
+    )
+
+    if len(df) == 0:
+        print(f"    No {source_type} data for {year}.")
+
+        return None
+
+    else:
+        df = df.pivot(index="regine", columns="name", values="value").copy()
+        cols = [f"{source_type}_{col.lower()}" for col in df.columns]
+        df.columns = cols
+        df.columns.name = ""
+        if par_list:
+            cols = [
+                f"{source_type}_{col}"
+                for col in par_list
+                if f"{source_type}_{col}" in df.columns
+            ]
+            df = df[cols]
+        df.reset_index(inplace=True)
+
+        return df
+
+
+def assign_spredt_to_regines(reg_gdf, spr_df):
+    """Kommune level totals for spredt in 'spr_df' area are assigned to regines in 'reg_gdf'.
+    Spredt is distributed evenly over all agricultural land in each kommune (if agricultural
+    land exists) and otherwise it is simply distributed evenly over all land.
+
+    Args
+        reg_gdf: Geodataframe of regine data.
+        spr_df:  dataframe of kommune level spredt data
+
+    Returns
+        Geodataframe. New columns are added to 'reg_gdf' indicting the spredt inputs to each
+        regine.
+    """
+    par_list = ["totn_kg", "totp_kg"]
+
+    kom_df = reg_gdf[["komnr", "a_cat_land_km2", "a_agri_km2"]].copy()
+    kom_df = kom_df.groupby("komnr").sum()
+    kom_df.reset_index(inplace=True)
+    kom_df.columns = ["komnr", "a_kom_km2", "a_agri_kom_km2"]
+
+    if spr_df is not None:
+        kom_df = pd.merge(kom_df, spr_df, how="left", on="komnr")
+    else:  # Create cols of zeros
+        for par in par_list:
+            kom_df[f"spredt_{par}"] = 0
+
+    # Join back to main df
+    reg_gdf = pd.merge(reg_gdf, kom_df, how="left", on="komnr")
+
+    # Distribute loads
+    for par in par_list:
+        # Over agri
+        reg_gdf["spredt_agri"] = (
+            reg_gdf[f"spredt_{par}"] * reg_gdf["a_agri_km2"] / reg_gdf["a_agri_kom_km2"]
+        )
+        # Over all area
+        reg_gdf["spredt_all"] = (
+            reg_gdf[f"spredt_{par}"] * reg_gdf["a_cat_land_km2"] / reg_gdf["a_kom_km2"]
+        )
+
+        # Use agri if > 0, else all
+        reg_gdf[f"spredt_{par}"] = np.where(
+            reg_gdf["a_agri_kom_km2"] > 0, reg_gdf["spredt_agri"], reg_gdf["spredt_all"]
+        )
+    reg_gdf.drop(
+        ["spredt_agri", "spredt_all", "a_kom_km2", "a_agri_kom_km2"],
+        inplace=True,
+        axis="columns",
+    )
+    for par in par_list:
+        reg_gdf[f"spredt_{par}"].fillna(value=0, inplace=True)
 
     return reg_gdf
