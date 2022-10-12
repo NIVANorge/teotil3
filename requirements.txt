@@ -5,3 +5,5 @@ matplotlib
 networkx
 numpy
 pandas
+sqlalchemy
+rasterstats
