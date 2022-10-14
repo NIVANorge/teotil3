@@ -394,15 +394,19 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     df = pd.read_csv(res_csv)
 
     # Vollenweider parameters for individual lakes.
-    # par_name: (sigma, n)
     # The parameters sigma and n are those matching the following (equivalent) equations
     #     R = sigma / (sigma + rho^n) where rho = 1/tau
     #     T = 1 / (1 + sigma * tau^n)
-
+    # par_name: (sigma, n)
     voll_dict = {
         "totp": (1, 0.5),
+        "tdp": (0.5, 0.5),
+        "tpp": (2, 0.5),
         "totn": (0.75, 0.4),
         "din": (1, 1),
+        "ton": (0.2, 1),
+        "ss": (90, 1),
+        "toc": (0.6, 0.4),
     }
     for par in voll_dict.keys():
         sigma, n = voll_dict[par]
@@ -414,10 +418,6 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     # Original ret_n assumed to be 0.2*ret_totp
     df["ret_orig-totn"] = 0.2 * df["ret_totp"]
     df["trans_orig-totn"] = 1 - df["ret_orig-totn"]
-
-    # TDP assumed to be 0.6*ret_totp
-    df["ret_tdp"] = 0.6 * df["ret_totp"]
-    df["trans_tdp"] = 1 - df["ret_tdp"]
 
     # Aggregate to regine level
     pars = [col[6:] for col in df.columns if col.startswith("trans_")]
