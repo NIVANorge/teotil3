@@ -1,4 +1,4 @@
-lake_id,reference,tau_years,sed_retention
+lake_id,reference,tau,RSS
 1,Brune (1953),0.0016,0.0000
 2,Brune (1953),0.0029,0.0230
 3,Brune (1953),0.0041,0.0580

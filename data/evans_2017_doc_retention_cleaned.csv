@@ -1,0 +1,97 @@
+name,country,type,nutrient_status,tau,DOC_in,DOC_out,TDOC,RDOC,Notes,DOC_type
+Langtjern,Norway,Lake,Oligotrophic,0.183333333,7.3,6.7,0.92,0.08,LJB added based on deWit2018,DOC sink
+Blue Chalk,Canada,Lake,Oligotrophic,5.67,2.16,0.89,0.41,0.59,,DOC sink
+Chub,Canada,Lake,Oligotrophic,2.10,3.98,2.34,0.59,0.41,,DOC sink
+Crosson,Canada,Lake,Oligotrophic,1.64,3.89,2.43,0.62,0.38,,DOC sink
+Dickie,Canada,Lake,Oligotrophic,1.88,5.84,2.66,0.46,0.54,,DOC sink
+Harp,Canada,Lake,Oligotrophic,3.20,4.32,2.52,0.58,0.42,,DOC sink
+Plastic,Canada,Lake,Oligotrophic,3.95,3.80,1.16,0.30,0.70,,DOC sink
+Red Chalk,Canada,Lake,Oligotrophic,2.61,2.28,1.43,0.63,0.37,,DOC sink
+Lake 114,Canada,Lake,Oligotrophic,2.10,2.25,1.20,0.53,0.47,,DOC sink
+Lake 221,Canada,Lake,Oligotrophic,1.40,2.63,2.02,0.77,0.23,,DOC sink
+Lake 222,Canada,Lake,Oligotrophic,1.90,2.63,1.63,0.62,0.38,,DOC sink
+Lake 224,Canada,Lake,Oligotrophic,17.40,2.05,0.60,0.29,0.71,,DOC sink
+Lake 225,Canada,Lake,Oligotrophic,0.90,2.63,2.08,0.79,0.21,,DOC sink
+Lake 226,Canada,Lake,Oligotrophic,5.90,2.40,1.18,0.49,0.51,,DOC sink
+Lake 227,Canada,Lake,Oligotrophic,3.90,2.46,1.69,0.69,0.31,,DOC sink
+Lake 239,Canada,Lake,Oligotrophic,9.20,2.46,1.13,0.46,0.54,,DOC sink
+Lake 303,Canada,Lake,Oligotrophic,1.70,2.29,1.52,0.66,0.34,,DOC sink
+Lake 304,Canada,Lake,Oligotrophic,2.70,2.49,1.69,0.68,0.32,,DOC sink
+Lake 305,Canada,Lake,Oligotrophic,19.30,2.20,0.86,0.39,0.61,,DOC sink
+Lake 382,Canada,Lake,Oligotrophic,6.20,2.33,1.27,0.55,0.45,,DOC sink
+?ertovo,Czech Republic,Lake,Oligotrophic,1.60,6.32,4.01,0.63,0.37,,DOC sink
+Alinen Rautjarvi,Finland,Lake,Oligotrophic,0.13,2.90,2.39,0.83,0.17,,DOC sink
+Ekojarvi,Finland,Lake,Oligotrophic,0.07,2.79,2.52,0.90,0.10,,DOC sink
+Kuohijarvi,Finland,Lake,Oligotrophic,2.55,1.95,1.15,0.59,0.41,,DOC sink
+Skervatjern,Norway,Lake,Oligotrophic,0.38,12.99,7.09,0.55,0.45,,DOC sink
+Sandvatn,Norway,Lake,Oligotrophic,0.32,2.75,1.79,0.65,0.35,,DOC sink
+Ørsdalsvatnet,Norway,Lake,Oligotrophic,2.49,4.65,2.66,0.57,0.43,,DOC sink
+Røynelandsvatn,Norway,Lake,Oligotrophic,0.10,6.37,5.49,0.86,0.14,,DOC sink
+Gårdsjön,Sweden,Lake,Oligotrophic,1.66,5.22,1.42,0.27,0.73,,DOC sink
+Stora Hästevatten N,Sweden,Lake,Oligotrophic,0.92,4.49,1.51,0.34,0.66,,DOC sink
+Stora Hästevatten S,Sweden,Lake,Oligotrophic,1.22,4.56,2.48,0.54,0.46,,DOC sink
+Gaffeln,Sweden,Lake,Oligotrophic,1.72,6.36,3.60,0.57,0.43,,DOC sink
+Lilla Hästevatten,Sweden,Lake,Oligotrophic,1.10,5.60,2.63,0.47,0.53,,DOC sink
+Gäddtjärn,Sweden,Lake,Oligotrophic,0.13,15.00,11.72,0.78,0.22,,DOC sink
+Kinder,UK,Reservoir,Oligotrophic,0.28,6.89,5.35,0.78,0.22,,DOC sink
+Black Esk,UK,Reservoir,Oligotrophic,0.12,9.25,7.30,0.79,0.21,,DOC sink
+Conwy,UK,Lake,Oligotrophic,1.53,14.56,7.43,0.51,0.49,,DOC sink
+Cone Pond,USA,Lake,Oligotrophic,0.25,4.08,1.85,0.45,0.55,,DOC sink
+Savalbeg,UK,Lake*,Oligotrophic,0.39,10.93,5.54,0.51,0.49,,DOC sink
+Superior,USA/Canada,Lake,Oligotrophic,170.00,2.79,0.43,0.16,0.84,,DOC sink
+Paijanne,Finland,Lake,Oligotrophic,2.50,2.30,1.79,0.78,0.22,,DOC sink
+Malawi,Malawi,Lake,Oligotrophic,692.00,1.06,0.10,0.10,0.90,,DOC sink
+Diefenbaker,Canada,Reservoir,Oligotrophic,1.30,0.54,0.30,0.55,0.45,,DOC sink
+Plešné,Czech Republic,Lake,Mesotrophic,0.70,8.71,4.93,0.57,0.43,,DOC sink
+Buffalo Pound,Canada,Lake*,Mesotrophic,0.70,0.42,0.23,0.56,0.44,,DOC sink
+Friskjön,Sweden,Lake,Mesotrophic,0.72,5.21,2.76,0.53,0.47,,DOC sink
+Mälaren,Sweden,Lake,Mesotrophic,2.64,2.49,1.83,0.74,0.26,,DOC sink
+Bret,Switzerland,Lake,Mesotrophic,1.00,0.69,0.42,0.62,0.38,,DOC sink
+Burr Oak,USA,Reservoir,Mesotrophic,0.18,2.13,1.46,0.69,0.31,,DOC sink
+Valkea-Kotinen,Finland,Lake,Oligotrophic,1.33,2.22,2.34,1.06,-0.06,,Balanced
+Fjellgardsvatn,Norway,Lake,Oligotrophic,0.46,3.31,3.55,1.07,-0.07,,Balanced
+Lundetjenn,Norway,Lake,Oligotrophic,0.10,8.32,8.28,0.99,0.01,,Balanced
+Glenlatterach,UK,Reservoir,Oligotrophic,0.34,7.49,7.22,0.96,0.04,,Balanced
+Alturas,USA,Lake,Oligotrophic,1.59,1.52,1.51,0.99,0.01,,Balanced
+Hell Roaring,USA,Lake,Oligotrophic,0.09,1.35,1.38,1.02,-0.02,,Balanced
+Little Redfish,USA,Lake,Oligotrophic,0.01,1.52,1.63,1.07,-0.07,,Balanced
+Pettit,USA,Lake,Oligotrophic,2.03,1.16,1.24,1.07,-0.07,,Balanced
+Yellow Belly,USA,Lake,Oligotrophic,0.48,1.20,1.30,1.08,-0.08,,Balanced
+Arbutus,USA,Lake,Oligotrophic,0.60,3.25,3.54,1.09,-0.09,,Balanced
+Biwa,Japan,Lake,Oligotrophic,5.50,1.65,1.59,0.96,0.04,,Balanced
+Shingobee,USA,Lake,Mesotrophic,0.40,1.91,1.80,0.94,0.06,,Balanced
+Katepwa,Canada,Lake,Eutrophic,1.30,0.51,0.52,1.03,-0.03,,Balanced
+Wascana,Canada,Reservoir,Eutrophic,0.01,0.73,0.73,1.00,0.00,,Balanced
+Vörtsjärv,Estonia,Lake,Eutrophic,1.00,5.45,5.88,1.08,-0.08,,Balanced
+Aydat,France,Lake,Eutrophic,0.63,0.54,0.58,1.09,-0.09,,Balanced
+Rophemel,France,Reservoir,Eutrophic,0.05,2.47,2.47,1.00,0.00,,Balanced
+Vansjø,Norway,Lake,Eutrophic,0.50,8.12,8.76,1.08,-0.08,,Balanced
+Taylorsville,USA,Reservoir,Eutrophic,0.23,1.16,1.12,0.96,0.04,,Balanced
+Bull Trout,USA,Lake,Oligotrophic,0.13,1.16,1.43,1.23,-0.23,,Source
+Stanley,USA,Reservoir,Oligotrophic,0.30,1.14,1.53,1.34,-0.34,,Source
+Lawrence,USA,Lake,Oligotrophic,1.45,2.58,4.42,1.71,-0.71,,Source
+Williams,USA,Lake,Oligotrophic,3.50,0.58,1.49,2.55,-1.55,,Source
+Eckarfjärden,Sweden,Lake,Mesotrophic,1.05,1.66,3.16,1.90,-0.90,,Source
+Woods Pond,Canada,Lake,Mesotrophic,0.08,73.89,83.96,1.14,-0.14,,Source
+Baddinsgill,UK,Reservoir,Mesotrophic,0.19,8.14,9.39,1.15,-0.15,,Source
+West Water,UK,Reservoir,Mesotrophic,0.67,6.99,9.00,1.29,-0.29,,Source
+Loch Leven,UK,Lake,Mesotrophic,0.30,4.84,5.59,1.16,-0.16,,Source
+Last Mountain Lake,Canada,Lake,Eutrophic,12.60,0.33,0.58,1.79,-0.79,,Source
+Horseshoe-Bartlett,USA,Reservoir,Eutrophic,0.19,0.22,0.31,1.40,-0.40,,Source
+Crooked Lake,Canada,Lake,Eutrophic,0.50,0.29,0.50,1.74,-0.74,,Source
+Marne,France,Reservoir,Eutrophic,0.53,0.26,0.49,1.86,-0.86,,Source
+Kasimagaura,Japan,Lake,Eutrophic,1.00,1.06,1.48,1.39,-0.39,,Source
+Acton,USA,Reservoir,Eutrophic,0.80,1.62,2.26,1.40,-0.40,,Source
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
