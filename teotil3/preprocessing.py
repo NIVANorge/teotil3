@@ -434,3 +434,342 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
             pass
 
     return reg_gdf
+
+
+def read_raw_aquaculture_data(xl_path, sheet_name, year, eng):
+    """Read the raw aquaculture data from Fiskeridirektoratet. Identifies sites missing
+    co-ordinates and those not already in the database. Returns a dataframe of new site
+    locations to add to the database, plus a dataframe of raw monthly data for further
+    processing.
+
+    Args
+        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
+        sheet_name: Str. Worksheet to read
+        year:       Int. Year being processed
+        eng:        Obj. Active database connection object connected to PostGIS
+
+    Returns
+        Tuple of Dataframes (new_locs_df, data_df).
+    """
+    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
+    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+    assert isinstance(year, int), "'year' must be an integer."
+
+    # Relevant cols in raw data
+    cols_dict = {
+        "AAR": "year",
+        "LOKNR": "site_id",
+        "LOKNAVN": "name",
+        "N_DESIMALGRADER_Y": "lat",
+        "O_DESIMALGRADER_X": "lon",
+    }
+
+    # Read raw file
+    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    df.dropna(how="all", inplace=True)
+    df.rename(
+        cols_dict,
+        axis="columns",
+        inplace=True,
+    )
+    df = df.query("year == @year")
+    df["site_id"] = df["site_id"].astype(str)
+    # df = df[cols_dict.values()]
+
+    # Check for missing co-ords
+    no_coords_df = df.query("(lat != lat) or (lon != lon)")[
+        ["site_id", "name"]
+    ].sort_values("site_id")
+    print(
+        f"{len(no_coords_df)} locations do not have co-ordinates in this year's data."
+    )
+
+    # Check for sites are not already in db
+    sql = text(
+        """SELECT DISTINCT(site_id) FROM teotil3.point_source_locations
+           WHERE type = 'Aquaculture'
+        """
+    )
+    in_db_df = pd.read_sql_query(sql, eng)
+    not_in_db = set(df["site_id"].values) - set(in_db_df["site_id"].values)
+    not_in_db_df = df[df["site_id"].isin(list(not_in_db))][
+        ["site_id", "name", "lat", "lon"]
+    ].drop_duplicates(subset=["site_id"])
+    print(f"{len(not_in_db_df)} locations are not in the database.")
+    if len(not_in_db_df) > 0:
+        # Format df to match db
+        not_in_db_df.dropna(subset=["lat", "lon"], how="any", inplace=True)
+        not_in_db_gdf = gpd.GeoDataFrame(
+            not_in_db_df,
+            geometry=gpd.points_from_xy(
+                not_in_db_df["lon"], not_in_db_df["lat"], crs="epsg:4326"
+            ),
+        )
+        not_in_db_gdf = not_in_db_gdf.to_crs("epsg:25833")
+        not_in_db_gdf["type"] = "Aquaculture"
+        not_in_db_gdf = not_in_db_gdf[["site_id", "name", "type", "geometry"]]
+        not_in_db_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+        not_in_db_gdf.reset_index(drop=True, inplace=True)
+
+        return not_in_db_gdf, df
+
+    return None, df
+
+
+def estimate_aquaculture_nutrient_inputs(
+    df, year, eng, cu_tonnes=None, species_ids=[71401, 71101]
+):
+    """Estimate losses of nutrients from aquaculture.
+
+    Args
+        df:          Dataframe of raw monthly data
+        year:        Int. Year of interest
+        eng:         Obj. Active database connection object connected to PostGIS
+        cu_tonnes:   Float. Optional. Total annual usage of copper by the aquaculture industry
+                     in tonnes. If supplied, 85% of this value is assumed to be lost to the
+                     environment. Losses are assigned to each aquaculture site in proportion
+                     to the total loss of P
+        species_ids: List. Species to consider. The default is salmon and rainbow trout
+
+    Returns
+        Dataframe of estimated nutrient losses that can be added to teotil3.point_source_values.
+    """
+    assert isinstance(year, int), "'year' must be an integer."
+    assert isinstance(species_ids, list), "'species_ids' must be a list."
+    if cu_tonnes:
+        assert isinstance(cu_tonnes, (int, float)), "'cu_tonnes' must be a number."
+
+    # Read coefficients for aquaculture calcs
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/aquaculture_productivity_coefficients.csv"
+    coeff_df = pd.read_csv(url, index_col=0)
+    fcr = coeff_df.loc["fcr"]["value"]
+    k_feed_n = coeff_df.loc["k_feed_n"]["value"]
+    k_feed_p = coeff_df.loc["k_feed_p"]["value"]
+    k_feed_c = coeff_df.loc["k_feed_c"]["value"]
+    k_prod_n = coeff_df.loc["k_prod_n"]["value"]
+    k_prod_p = coeff_df.loc["k_prod_p"]["value"]
+
+    # Fill NaN with 0 where necessary
+    cols = [
+        "FISKEBEHOLDNING_ANTALL",
+        "FISKEBEHOLDNING_SNITTVEKT",
+        "TAP_DOD",
+        "TAP_UTKAST",
+        "TAP_ROMT",
+        "TAP_ANNET",
+        "TELLEFEIL",
+        "UTTAK_KILO",
+    ]
+    for col in cols:
+        df[col].fillna(value=0, inplace=True)
+
+    # Calculate biomass
+    df["biomass_kg"] = (
+        (
+            (df["FISKEBEHOLDNING_ANTALL"] * df["FISKEBEHOLDNING_SNITTVEKT"])
+            + (df["TAP_DOD"] * df["FISKEBEHOLDNING_SNITTVEKT"])
+            + (df["TAP_UTKAST"] * df["FISKEBEHOLDNING_SNITTVEKT"])
+            + (df["TAP_ROMT"] * df["FISKEBEHOLDNING_SNITTVEKT"])
+            + (df["TAP_ANNET"] * df["FISKEBEHOLDNING_SNITTVEKT"])
+            + (df["TELLEFEIL"] * df["FISKEBEHOLDNING_SNITTVEKT"])
+        )
+        / 1000.0
+    ) + df["UTTAK_KILO"]
+
+    # Aggregate by month, location and species
+    agg_df = df.groupby(by=["site_id", "MAANED", "FISKEARTID"])
+    sum_df = agg_df.sum()[["FORFORBRUK_KILO", "biomass_kg"]]
+
+    # Get biomass for previous month
+    sum_df["biomass_prev_kg"] = sum_df.apply(
+        get_aquaculture_biomass_previous_month, args=(sum_df,), axis=1
+    )
+
+    # Get productivity for each month
+    sum_df["prod_kg"] = sum_df.apply(
+        calculate_aquaculture_productivity, args=(fcr,), axis=1
+    )
+
+    # Calculate nutrient losses
+    sum_df["TOTN_kg"] = sum_df.apply(
+        calculate_aquaculture_n_and_p_loss,
+        args=(k_feed_n, k_prod_n, fcr),
+        axis=1,
+    )
+    sum_df["TOTP_kg"] = sum_df.apply(
+        calculate_aquaculture_n_and_p_loss,
+        args=(k_feed_p, k_prod_p, fcr),
+        axis=1,
+    )
+    sum_df["TOC_kg"] = sum_df.apply(
+        calculate_aquaculture_toc_loss,
+        args=(k_feed_c, fcr),
+        axis=1,
+    )
+
+    # Get just the data for species of interest
+    sum_df.reset_index(inplace=True)
+    sum_df = sum_df.query("FISKEARTID in @species_ids")
+
+    # Aggregate by location
+    agg_df = sum_df.groupby(by=["site_id"])
+    sum_df = agg_df.sum()[["TOTN_kg", "TOTP_kg", "TOC_kg"]]
+
+    # Distribute Cu according to P production
+    if cu_tonnes:
+        cu_loss_tonnes = 0.85 * cu_tonnes
+        print(
+            f"The total annual copper lost to water from aquaculture is {cu_loss_tonnes:.1f} tonnes."
+        )
+        sum_df["Cu_kg"] = (
+            1000 * cu_loss_tonnes * sum_df["TOTP_kg"] / sum_df["TOTP_kg"].sum()
+        )
+
+    # Convert to par_ids and melt to format required by db
+    sql = text(
+        """SELECT in_par_id,
+             CONCAT_WS('_', name, unit) AS par_unit
+           FROM teotil3.input_param_definitions
+        """
+    )
+    input_par_df = pd.read_sql(sql, eng)
+    par_map = input_par_df.set_index("par_unit").to_dict()["in_par_id"]
+
+    sum_df.rename(par_map, axis="columns", inplace=True)
+    sum_df.reset_index(inplace=True)
+    sum_df = pd.melt(
+        sum_df, id_vars="site_id", var_name="in_par_id", value_name="value"
+    )
+    sum_df["year"] = year
+    sum_df = sum_df[["site_id", "in_par_id", "year", "value"]]
+
+    return sum_df
+
+
+def get_aquaculture_biomass_previous_month(row, df):
+    """Returns fish farm biomass for the previous month. If month = 1, or if data for the
+    previous month are not available, returns 0.
+
+    Args
+        row: Obj. Dataframe row
+        df:  Obj. Original dataframe containing data for other months
+
+    Returns
+        Float. Biomass for previous month in kg.
+    """
+    # Get row props from multi-index
+    loc = row.name[0]
+    mon = row.name[1]
+    spec = row.name[2]
+
+    if mon == 1:
+        return 0
+    else:
+        try:
+            # Returns a KeyError if data for (mon - 1) do not exist
+            return df.loc[(loc, mon - 1, spec)]["biomass_kg"]
+
+        except KeyError:
+            return 0
+
+
+def calculate_aquaculture_productivity(row, fcr):
+    """Calculate fish farm productivity based on change in biomass compared to the previous
+    month. If biomass has increased, the productivity is the increase in kg. If biomass
+    has decreased, or if either of the biomasses are zero, the Feed Conversion Ratio (FCR) is
+    used instead - see Section 3.3.6 here:
+
+    https://niva.brage.unit.no/niva-xmlui/bitstream/handle/11250/2985726/7726-2022+high.pdf?sequence=1#page=29
+
+    Args
+        row: Obj. Dataframe row
+        fcr: Float. Feed Conversion Ratio to use when biomass figures are not available
+
+    Returns
+        Float. Productivity for month in kg.
+    """
+    assert isinstance(fcr, (int, float)), "'fcr' must be a number."
+
+    if (
+        (row["biomass_kg"] == 0)
+        or (row["biomass_prev_kg"] == 0)
+        or (row["biomass_kg"] < row["biomass_prev_kg"])
+    ):
+        return row["FORFORBRUK_KILO"] / fcr
+
+    else:
+        return row["biomass_kg"] - row["biomass_prev_kg"]
+
+
+def calculate_aquaculture_n_and_p_loss(row, k_feed, k_prod, fcr):
+    """Calculate the balance of "nutrients in" versus "nutrients out" for aquaculture. For
+    any parameter, X, (e.g. TOTN or TOTP) 'k_feed' is the proportion of X in the feed, and
+    'k_prod' is the proportion of X in exported fish. The default values used by TEOTIL are
+    here:
+
+    https://github.com/NIVANorge/teotil3/blob/main/data/aquaculture_productivity_coefficients.csv
+
+    The balance is calculated as
+
+        losses = inputs - outputs
+               = (k_feed * feed_use) - (k_prod * productivity)
+
+    If productivity data are not available, or if the apparent nutrient balance is
+    negative, the Feed Conversion Ratio is used to estimate productivity.
+
+    Args
+        row:    Obj. Dataframe row being processed
+        k_feed: Float. Proportion of X in feed
+        k_prod: Float. Proportion of X in exported fish
+        fcr:    Float. Feed Conversion Ratio to use when productivity figures are not available
+
+    Returns
+        Float. Nutrients lost in kg.
+    """
+    assert isinstance(fcr, (int, float)), "'fcr' must be a number."
+    assert isinstance(k_feed, (int, float)), "'fcr' must be a number."
+    assert isinstance(k_prod, (int, float)), "'fcr' must be a number."
+
+    if row["FORFORBRUK_KILO"] == 0:
+        return 0
+
+    elif row["prod_kg"] == 0:
+        return (k_feed * row["FORFORBRUK_KILO"]) - (
+            k_prod * row["FORFORBRUK_KILO"] / fcr
+        )
+
+    elif ((k_feed * row["FORFORBRUK_KILO"]) - (k_prod * row["prod_kg"])) < 0:
+        return (k_feed * row["FORFORBRUK_KILO"]) - (
+            k_prod * row["FORFORBRUK_KILO"] / fcr
+        )
+
+    else:
+        return (k_feed * row["FORFORBRUK_KILO"]) - (k_prod * row["prod_kg"])
+
+
+def calculate_aquaculture_toc_loss(row, k_feed, fcr):
+    """Estimate TOC losses from aquaculture based on feed use. The function implements the
+    method described in section 6.2.4 here:
+
+    https://niva.brage.unit.no/niva-xmlui/bitstream/handle/11250/2985726/7726-2022+high.pdf?sequence=1#page=43
+
+    Args
+         row:    Obj. Dataframe row being processed
+         k_feed: Float. Propoertion of TOC in feed
+         fcr:    Float. Feed Conversion Ratio to use when feed use figures are not available
+
+    Returns
+        Float. TOC loss in kg.
+    """
+    assert isinstance(k_feed, (int, float)), "'k_feed' must be a number."
+    assert isinstance(fcr, (int, float)), "'fcr' must be a number."
+
+    if (row["FORFORBRUK_KILO"] == 0) and (row["prod_kg"] == 0):
+        return 0
+    elif (row["FORFORBRUK_KILO"] == 0) and (row["prod_kg"] > 0):
+        # Use FCR to estimate actual feed use
+        feed_use = fcr * row["prod_kg"]
+        return k_feed * feed_use * (0.97 * 0.3 + 0.03)
+    else:
+        # Use actual feed use values
+        return k_feed * row["FORFORBRUK_KILO"] * (0.97 * 0.3 + 0.03)
