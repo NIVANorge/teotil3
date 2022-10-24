@@ -30,3 +30,7 @@ Data processing and intermediate analysis for developing TEOTIL3.
  * [Notebook 2.7b: Spatial interpolation for woodland and upland areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7b_spatial_interpolation_skog_fjell.ipynb)
  * [Notebook 2.7c: Inputs from urban, glacial and lake areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7c_other_background_coeffs.ipynb)
  * [Notebook 2.7d: Exploring patterns in background inputs](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7d_explore_background_inputs.ipynb)
+ 
+### Task 2.9: Improve workflow for aquaculture
+
+ * [Notebook 2.9: Aquaculture](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-9_improve_aquaculture_workflow.ipynb) 
