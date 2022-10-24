@@ -1,0 +1,6 @@
+coefficient,value,description
+fcr,1.15,Feed Conversion Ratio based on national data. Used when site-specific productivity data are not available
+k_feed_n,0.0584,Average nitrogen content of feed
+k_feed_p,0.0096,Average phosphorus content of feed
+k_prod_n,0.0296,Average nitrogen content of fish
+k_prod_p,0.0045,Average phosphorus content of fish
