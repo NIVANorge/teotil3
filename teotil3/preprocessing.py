@@ -1,8 +1,11 @@
+import os
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyproj
 from rasterstats import zonal_stats
-from sqlalchemy import text
+from sqlalchemy import exc, text
 
 
 def read_raw_regine_data(geodatabase_path, layer_name):
@@ -449,7 +452,7 @@ def read_raw_aquaculture_data(xl_path, sheet_name, year, eng):
         eng:        Obj. Active database connection object connected to PostGIS
 
     Returns
-        Tuple of Dataframes (new_locs_df, data_df).
+        Tuple of (geo)dataframes (new_locs_gdf, data_df).
     """
     assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
     assert isinstance(sheet_name, str), "'sheet_name' must be a string."
@@ -484,7 +487,7 @@ def read_raw_aquaculture_data(xl_path, sheet_name, year, eng):
         f"{len(no_coords_df)} locations do not have co-ordinates in this year's data."
     )
 
-    # Check for sites are not already in db
+    # Check for sites not already in db
     sql = text(
         """SELECT DISTINCT(site_id) FROM teotil3.point_source_locations
            WHERE type = 'Aquaculture'
@@ -537,7 +540,9 @@ def estimate_aquaculture_nutrient_inputs(
     assert isinstance(year, int), "'year' must be an integer."
     assert isinstance(species_ids, list), "'species_ids' must be a list."
     if cu_tonnes:
-        assert isinstance(cu_tonnes, (int, float)), "'cu_tonnes' must be a number."
+        assert isinstance(
+            cu_tonnes, (int, float, np.number)
+        ), "'cu_tonnes' must be a number."
 
     # Read coefficients for aquaculture calcs
     url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/aquaculture_productivity_coefficients.csv"
@@ -773,3 +778,450 @@ def calculate_aquaculture_toc_loss(row, k_feed, fcr):
     else:
         # Use actual feed use values
         return k_feed * row["FORFORBRUK_KILO"] * (0.97 * 0.3 + 0.03)
+
+
+def get_annual_copper_usage_aquaculture(year):
+    """Get the total annual copper usage for the sepcified year from a file hosted on GitHub.
+    Values are provided by Miljødirektoratet.
+
+    Args
+        year: Int. Year of interest
+
+    Returns
+        Float. Total copper usage in Aquaculture in tonnes. TEOTIL assumes 85% of this is
+        lost to the environment
+    """
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/aquaculture_annual_copper_usage.csv"
+    df = pd.read_csv(url, index_col=0)
+    cu_tonnes = df.loc[year]["tot_cu_tonnes"]
+
+    return cu_tonnes
+
+
+def utm_to_wgs84_dd(utm_df, zone="utm_zone", east="utm_east", north="utm_north"):
+    """Converts UTM co-ordinates to WGS84 decimal degrees, allowing for each row in
+    'utm_df' to have a different UTM Zone. (Note that if all rows have the same zone,
+    this implememntation is slow because it processes each row individually).
+
+    Args
+        utm_df: Dataframe containing UTM co-ords
+        zone:   Str. Column defining UTM zone
+        east:   Str. Column defining UTM Easting
+        north:  Str. Column defining UTM Northing
+
+    Returns
+        Copy of utm_df with 'lat' and 'lon' columns added.
+    """
+    # Copy utm_df
+    df = utm_df.copy()
+
+    # Containers for data
+    lats = []
+    lons = []
+
+    # Loop over df
+    for idx, row in df.iterrows():
+        # Only convert if UTM co-ords are available
+        if pd.isnull(row[east]) or pd.isnull(row[north]) or pd.isnull(row[zone]):
+            lats.append(np.nan)
+            lons.append(np.nan)
+        else:
+            # Build projection
+            p = pyproj.Proj(proj="utm", zone=row[zone], ellps="WGS84")
+
+            # Convert
+            lon, lat = p(row[east], row[north], inverse=True)
+            lats.append(lat)
+            lons.append(lon)
+
+    # Add to df
+    df["lat"] = lats
+    df["lon"] = lons
+
+    return df
+
+
+def read_raw_large_wastewater_data(xl_path, sheet_name):
+    """Reads the raw, gap-filled data for TOTN and TOTP from "large" (>50 p.e.) wastewater
+    treatment sites provided by SSB. Note that this dataset includes some data that is
+    duplicated in the "miljøgifter" dataset.
+
+    Args
+        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
+        sheet_name: Str. Worksheet to read
+
+    Returns
+        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
+        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
+        site.
+    """
+    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
+    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+
+    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    df.dropna(how="all", inplace=True)
+    df["type"] = "Wastewater"
+
+    # Get location info
+    loc_gdf = df[["ANLEGGSNR", "ANLEGGSNAVN", "type", "Sone", "UTM_E", "UTM_N"]].copy()
+    loc_gdf.columns = [
+        "site_id",
+        "name",
+        "type",
+        "zone",
+        "east",
+        "north",
+    ]
+    loc_gdf.drop_duplicates(inplace=True)
+
+    # Convert UTM Zone to Pandas' nullable integer data type
+    # (because proj. complains about float UTM zones)
+    loc_gdf["zone"] = loc_gdf["zone"].astype(pd.Int64Dtype())
+
+    # Convert mixed UTM => lat/lon => EPSG 25833
+    loc_gdf = utm_to_wgs84_dd(loc_gdf, "zone", "east", "north")
+    loc_gdf = gpd.GeoDataFrame(
+        loc_gdf,
+        geometry=gpd.points_from_xy(loc_gdf["lon"], loc_gdf["lat"], crs="epsg:4326"),
+    )
+    loc_gdf = loc_gdf.to_crs("epsg:25833")
+    loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
+    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.reset_index(drop=True, inplace=True)
+
+    # Get cols of interest
+    df = df[["ANLEGGSNR", "MENGDE_P_UT_kg", "MENGDE_N_UT_kg"]]
+
+    # Use var names from miljøgifter dataset, so it's easy to identify duplicates lates
+    df.columns = ["site_id", "KONSMENGDTOTP10_kg", "KONSMENGDTOTN10_kg"]
+    df = df.melt(id_vars="site_id").dropna(subset="value")
+
+    return loc_gdf, df
+
+
+def read_raw_miljogifter_data(xl_path, sheet_name):
+    """Reads the raw, not-gap-filled data for all variables from "large" (>50 p.e.)
+    wastewater treatment sites. Also provided by SSB. Note that the 'miljøgifter'
+    dataset includes some data that is duplicated in the "store anlegg" dataset.
+
+    Args
+        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
+        sheet_name: Str. Worksheet to read
+
+    Returns
+        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
+        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
+        site.
+    """
+    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
+    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+
+    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    df.dropna(how="all", inplace=True)
+    df["type"] = "Wastewater"
+
+    # Get location info
+    loc_gdf = df[
+        ["ANLEGGSNR", "ANLEGGSNAVN", "type", "SONEBELTE", "UTMOST", "UTMNORD"]
+    ].copy()
+    loc_gdf.columns = [
+        "site_id",
+        "name",
+        "type",
+        "zone",
+        "east",
+        "north",
+    ]
+    loc_gdf.drop_duplicates(inplace=True)
+
+    # Convert UTM Zone to Pandas' nullable integer data type
+    # (because proj. complains about float UTM zones)
+    loc_gdf["zone"] = loc_gdf["zone"].astype(pd.Int64Dtype())
+
+    # Convert mixed UTM => lat/lon => EPSG 25833
+    loc_gdf = utm_to_wgs84_dd(loc_gdf, "zone", "east", "north")
+    loc_gdf = gpd.GeoDataFrame(
+        loc_gdf,
+        geometry=gpd.points_from_xy(loc_gdf["lon"], loc_gdf["lat"], crs="epsg:4326"),
+    )
+    loc_gdf = loc_gdf.to_crs("epsg:25833")
+    loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
+    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.reset_index(drop=True, inplace=True)
+
+    # Get discharge cols of interest
+    cols = [
+        "KONSMENGD5BOF10",
+        "KONSMENGDKOF10",
+        "KONSMENGDSS10",
+        "KONSMENGDTOTN10",
+        "KONSMENGDTOTP10",
+        "MILJOGIFTAS2",
+        "MILJOGIFTCD2",
+        "MILJOGIFTCR2",
+        "MILJOGIFTCU2",
+        "MILJOGIFTHG2",
+        "MILJOGIFTNI2",
+        "MILJOGIFTPB2",
+        "MILJOGIFTZN2",
+    ]
+    df = df[["ANLEGGSNR"] + cols]
+    df.dropna(subset=cols, how="all", inplace=True)
+    df.columns = ["site_id"] + [f"{col}_kg" for col in cols]
+    df = df.melt(id_vars="site_id").dropna(subset="value")
+
+    return loc_gdf, df
+
+
+def read_raw_industry_data(xl_path, sheet_name):
+    """Reads the raw industry data provided by Miljødirektoratet.
+
+    Args
+        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
+        sheet_name: Str. Worksheet to read
+
+    Returns
+        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
+        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
+        site.
+    """
+    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
+    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+
+    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    df.dropna(how="all", inplace=True)
+    assert (
+        len(df["År"].unique()) == 1
+    ), f"The industry dataset includes values for several years:\n{df['År'].unique()}"
+    df["type"] = "Industry"
+
+    # Get location info
+    loc_gdf = df[
+        [
+            "Anleggsnr",
+            "Anleggsnavn",
+            "type",
+            "Geografisk Longitude",
+            "Geografisk Latitude",
+        ]
+    ].copy()
+    loc_gdf.columns = [
+        "site_id",
+        "name",
+        "type",
+        "lon",
+        "lat",
+    ]
+    loc_gdf.drop_duplicates(inplace=True)
+
+    # Convert lat/lon => EPSG 25833
+    loc_gdf = gpd.GeoDataFrame(
+        loc_gdf,
+        geometry=gpd.points_from_xy(loc_gdf["lon"], loc_gdf["lat"], crs="epsg:4326"),
+    )
+    loc_gdf = loc_gdf.to_crs("epsg:25833")
+    loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
+    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.reset_index(drop=True, inplace=True)
+
+    # Get discharge cols of interest
+    df = df[["Anleggsnr", "Komp.kode", "Mengde", "Enhet"]]
+    df["Enhet"].replace({"tonn": "tonnes"}, inplace=True)
+    df["variable"] = df["Komp.kode"] + "_" + df["Enhet"]
+    df = df[["Anleggsnr", "variable", "Mengde"]]
+    df.columns = ["site_id", "variable", "value"]
+    df.dropna(subset="value", inplace=True)
+
+    return loc_gdf, df
+
+
+def read_large_wastewater_and_industry_data(data_fold, year, eng):
+    """Convenience function for processing the raw "store anlegg", "miljøgifter" and
+    "industry" datasets. Assumes the raw files are named and arranged as follows:
+
+        data_fold/
+        ├─ avlop_stor_anlegg_{year}_raw.xlsx
+        │  ├─ store_anlegg_{year} [worksheet]
+        │
+        ├─ avlop_miljogifter_{year}_raw.xlsx
+        │  ├─ miljogifter_{year} [worksheet]
+        │
+        ├─ industry_{year}_raw.xlsx
+        │  ├─ industry_{year} [worksheet]
+
+    This function reads all the raw files and combines site locations and data values
+    into a geodataframe and a dataframe, respectively. Parameter names are mapped to
+    input parameter IDs in the database, and duplicates are removed. Sites without
+    coordinates are highlighted, and the database is chekced to identify new sites
+    to be uploaded.
+
+    Args
+        data_fold: Str. Folder containg raw data files, with the file structure as
+                   describedabove
+        year:      Int. Year being processed
+        eng:       Obj. Active database connection object connected to PostGIS
+
+    Returns
+        Tuple of (geo)dataframes (loc_gdf, df), or (None, df). 'loc_gdf' is a point
+        geodataframe of site co-ordinates that are not already in the database (in
+        EPSG 25833); 'df' is a dataframe of discharges from each site. If there are no
+        new sites to add, None is returned instead of 'loc_gdf'.
+    """
+    assert isinstance(data_fold, str), "'data_fold' must be a valid file path."
+    assert isinstance(year, int), "'year' must be an integer."
+
+    # Read raw data
+    stan_path = os.path.join(data_fold, f"avlop_stor_anlegg_{year}_raw.xlsx")
+    stan_loc_gdf, stan_df = read_raw_large_wastewater_data(
+        stan_path, f"store_anlegg_{year}"
+    )
+    miljo_path = os.path.join(data_fold, f"avlop_miljogifter_{year}_raw.xlsx")
+    miljo_loc_gdf, miljo_df = read_raw_miljogifter_data(
+        miljo_path, f"miljogifter_{year}"
+    )
+    ind_path = os.path.join(data_fold, f"industry_{year}_raw.xlsx")
+    ind_loc_gdf, ind_df = read_raw_industry_data(ind_path, f"industry_{year}")
+
+    # Combine 'values' dfs
+    df = pd.concat([stan_df, miljo_df, ind_df], axis="rows")
+
+    # Convert to par_ids used in database
+    sql = text(
+        """SELECT in_par_id,
+             CONCAT_WS('_', name, unit) AS par_unit
+           FROM teotil3.input_param_definitions
+        """
+    )
+    input_par_df = pd.read_sql(sql, eng)
+    par_map = input_par_df.set_index("par_unit").to_dict()["in_par_id"]
+
+    # Get just vars of interest
+    db_pars = list(par_map.keys())
+    df = df.query("variable in @db_pars").copy()
+
+    # Drop duplicates due to the same data being present in "store anlegg" and miljøgifter
+    df.drop_duplicates(subset=["site_id", "variable"], inplace=True)
+
+    # Convert to db IDs
+    df["in_par_id"] = df["variable"].map(par_map)
+    df["year"] = year
+
+    # Process locations
+    loc_gdf = pd.concat([stan_loc_gdf, miljo_loc_gdf, ind_loc_gdf], axis="rows")
+    loc_gdf.drop_duplicates(subset=["site_id", "type"], keep="first", inplace=True)
+    if not loc_gdf["site_id"].is_unique:
+        dup_df = loc_gdf[loc_gdf.duplicated(subset="site_id", keep=False)].sort_values(
+            "site_id"
+        )
+        print(
+            "The same 'site_id' appears in both the industry and wastewater datasets. "
+            "This may cause problems with double counting of input parameters."
+        )
+        print(dup_df)
+        raise ValueError("Duplicated site IDs in 'industry' and 'wastewater' datasets.")
+
+    # Check for missing co-ords. See
+    # https://geopandas.org/en/stable/docs/user_guide/missing_empty.html
+    no_coords_gdf = loc_gdf[loc_gdf["geom"].is_empty | loc_gdf["geom"].isna()][
+        ["site_id", "name", "type"]
+    ].sort_values("site_id")
+    print(
+        f"{len(no_coords_gdf)} locations do not have co-ordinates in this year's data."
+    )
+    # print(no_coords_df)
+
+    # Drop values for sites without co-ords
+    no_coords_ids = no_coords_gdf["site_id"].tolist()
+    df = df.query("site_id not in @no_coords_ids")
+    df = df[["site_id", "in_par_id", "year", "value"]]
+    df.reset_index(inplace=True, drop=True)
+    assert df.notnull().all().all(), "'df' contains NaNs."
+
+    # Check for sites not already in db
+    sql = text(
+        """SELECT DISTINCT(site_id) FROM teotil3.point_source_locations
+           WHERE type IN ('Wastewater', 'Industry')
+        """
+    )
+    in_db_df = pd.read_sql_query(sql, eng)
+    not_in_db = set(loc_gdf["site_id"].values) - set(in_db_df["site_id"].values)
+    not_in_db_gdf = loc_gdf[loc_gdf["site_id"].isin(list(not_in_db))].drop_duplicates(
+        subset=["site_id"]
+    )
+    not_in_db_gdf.reset_index(inplace=True, drop=True)
+    if len(not_in_db_gdf) > 0:
+        not_in_db_no_coords_gdf = not_in_db_gdf[
+            not_in_db_gdf["site_id"].isin(no_coords_gdf["site_id"])
+        ].sort_values("site_id")
+        print(f"{len(not_in_db_gdf)} locations are not in the database.")
+        print(
+            len(not_in_db_no_coords_gdf),
+            "locations are not in the database and do not have "
+            "co-ordinates (and therefore must be ignored)",
+        )
+        # print(not_in_db_gdf)
+
+        return not_in_db_gdf, df
+
+    return None, df
+
+
+def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
+    """ """
+    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
+    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+    assert isinstance(year, int), "'year' must be an integer."
+
+    # Check admin. boundaries for 'year' are assigned in PostGIS. Before 2015, we
+    # just use the boundaries for 2014
+    if year < 2015:
+        admin_year = 2014
+    else:
+        admin_year = year
+    try:
+        sql = text(f"SELECT komnr_{admin_year} AS komnr FROM teotil3.regine_2022")
+        reg_kom_df = pd.read_sql(sql, eng)
+    except exc.ProgrammingError:
+        raise ValueError(
+            f"Administrative boundaries for {year} are not linked to regines in the TEOTIL database. "
+            "Please download the latest boundaries from Geonorge and update the regine dataset."
+        )
+
+    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    df.dropna(how="all", inplace=True)
+    df.rename({"KOMMUNENR": "komnr"}, axis="columns", inplace=True)
+
+    # Komnr. should be a 4 char string, not a float
+    fmt = lambda x: "%04d" % x
+    df["komnr"] = df["komnr"].apply(fmt)
+
+    # Before 2020, there was a very small kommune (1245; Sund) that is not linked to any regines
+    # "spredt" for this kommune can be aggregated with that for 1246
+    assert df[
+        "komnr"
+    ].is_unique, f"Dataset contains duplicated kommuner: {list(df['komnr'].unique())}"
+    df["komnr"].replace({"1245": "1246"}, inplace=True)
+    df = df.groupby("komnr").sum().reset_index()
+    df = df[["komnr", "P_kg", "N_kg"]]
+
+    # Check komnrs in SSB data are found in the admin data for this year
+    not_in_db = set(df["komnr"].values) - set(reg_kom_df["komnr"].values)
+    if len(not_in_db) > 0:
+        print(len(not_in_db), 'kommuner are not in the TEOTIL "regine" dataset.')
+        print(df[df["komnr"].isin(list(not_in_db))])
+
+    # Convert to par_ids used in database
+    sql = text(
+        """SELECT in_par_id,
+             CONCAT_WS('_', name, unit) AS par_unit
+           FROM teotil3.input_param_definitions
+        """
+    )
+    input_par_df = pd.read_sql(sql, eng)
+    par_map = input_par_df.set_index("par_unit").to_dict()["in_par_id"]
+    df.rename(par_map, axis="columns", inplace=True)
+    df = pd.melt(df, id_vars="komnr", var_name="in_par_id", value_name="value")
+    df["year"] = year
+    df = df[["komnr", "in_par_id", "year", "value"]]
+
+    return df
