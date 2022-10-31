@@ -1,24 +1,25 @@
-site_type,treatment_type,prop_din,prop_ton,prop_tpp,prop_tdp
-Large wastewater,Urenset,0.65,0.35,0.67,0.33
-Large wastewater,Mekanisk - slamavskiller,0.68,0.32,0.35,0.65
-Large wastewater,"Mekanisk - sil, rist",0.68,0.32,0.55,0.45
-Large wastewater,Mekanisk,0.68,0.32,0.45,0.55
-Large wastewater,Kjemisk,0.72,0.28,0.87,0.13
-Large wastewater,Biologisk,0.87,0.13,0.56,0.44
-Large wastewater,Kjemisk-biologisk,0.90,0.10,0.87,0.13
-Large wastewater,Kjemisk-biologisk m/N-fjerning,0.76,0.24,0.55,0.45
-Large wastewater,Naturbasert,0.91,0.09,0.66,0.34
-Large wastewater,Annen rensing,0.76,0.24,0.61,0.39
-Small wastewater,Direkte utslipp,0.65,0.35,0.67,0.33
-Small wastewater,Slamavskiller,0.68,0.32,0.35,0.65
-Small wastewater,Infiltrasjonsanlegg,0.90,0.10,0.87,0.13
-Small wastewater,Sandfilteranlegg,0.87,0.13,0.56,0.44
-Small wastewater,Biologisk,0.87,0.13,0.56,0.44
-Small wastewater,Kjemisk,0.72,0.28,0.87,0.13
-Small wastewater,Biologisk og kjemisk,0.90,0.10,0.87,0.13
-Small wastewater,Tett tank for svartvann,0.20,0.80,0.35,0.65
-Small wastewater,Biologisk toalett,0.20,0.80,0.35,0.65
-Small wastewater,Konstruert våtmark,0.90,0.10,0.66,0.34
-Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.30,0.70,0.66,0.34
-Small wastewater,"Biologisk toalett, gråvannsfilter",0.30,0.70,0.66,0.34
+site_type,treatment_type,prop_din,prop_ton,prop_tpp,prop_tdp,k1,k2,k3,b1,b2,b3
+Large wastewater,Urenset,0.65,0.35,0.67,0.33,0.23,1,0,0.6,1,0
+Large wastewater,Mekanisk - slamavskiller,0.68,0.32,0.35,0.65,0.23,1,0,0.6,1,0
+Large wastewater,"Mekanisk - sil, rist",0.68,0.32,0.55,0.45,0.23,1,0,0.6,1,0
+Large wastewater,Mekanisk,0.68,0.32,0.45,0.55,0.23,1,0,0.6,1,0
+Large wastewater,Kjemisk,0.72,0.28,0.87,0.13,0.36,1,-2.7,0.65,1,6.7
+Large wastewater,Biologisk,0.87,0.13,0.56,0.44,0.3,1,0,12.351,-0.857,0
+Large wastewater,Kjemisk-biologisk,0.90,0.10,0.87,0.13,5.1445,-0.76,0,7.5368,-0.754,0
+Large wastewater,Kjemisk-biologisk m/N-fjerning,0.76,0.24,0.55,0.45,5.1445,-0.76,0,7.5368,-0.754,0
+Large wastewater,Naturbasert,0.91,0.09,0.66,0.34,5.1445,-0.76,0,7.5368,-0.754,0
+Large wastewater,Annen rensing,0.76,0.24,0.61,0.39,0.23,1,0,0.6,1,0
+Small wastewater,Direkte utslipp,0.65,0.35,0.67,0.33,,,,,,
+Small wastewater,Slamavskiller,0.68,0.32,0.35,0.65,,,,,,
+Small wastewater,Infiltrasjonsanlegg,0.90,0.10,0.87,0.13,,,,,,
+Small wastewater,Sandfilteranlegg,0.87,0.13,0.56,0.44,,,,,,
+Small wastewater,Biologisk,0.87,0.13,0.56,0.44,,,,,,
+Small wastewater,Kjemisk,0.72,0.28,0.87,0.13,,,,,,
+Small wastewater,Biologisk og kjemisk,0.90,0.10,0.87,0.13,,,,,,
+Small wastewater,Tett tank for svartvann,0.20,0.80,0.35,0.65,,,,,,
+Small wastewater,Biologisk toalett,0.20,0.80,0.35,0.65,,,,,,
+Small wastewater,Konstruert våtmark,0.90,0.10,0.66,0.34,,,,,,
+Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.30,0.70,0.66,0.34,,,,,,
+Small wastewater,"Biologisk toalett, gråvannsfilter",0.30,0.70,0.66,0.34,,,,,,
 Small wastewater,Annen løsning,0.62,0.38,0.62,0.38
+,,,,,,
