@@ -512,6 +512,7 @@ def read_raw_aquaculture_data(xl_path, sheet_name, year, eng):
         not_in_db_gdf["type"] = "Aquaculture"
         not_in_db_gdf = not_in_db_gdf[["site_id", "name", "type", "geometry"]]
         not_in_db_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+        not_in_db_gdf.set_geometry("geom", inplace=True)
         not_in_db_gdf.reset_index(drop=True, inplace=True)
 
         return not_in_db_gdf, df
@@ -841,24 +842,32 @@ def utm_to_wgs84_dd(utm_df, zone="utm_zone", east="utm_east", north="utm_north")
     return df
 
 
-def read_raw_large_wastewater_data(xl_path, sheet_name):
+def read_raw_large_wastewater_data(
+    data_xl_path, data_sheet_name, types_xl_path, types_sheet_name
+):
     """Reads the raw, gap-filled data for TOTN and TOTP from "large" (>50 p.e.) wastewater
     treatment sites provided by SSB. Note that this dataset includes some data that is
     duplicated in the "miljøgifter" dataset.
 
     Args
-        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
-        sheet_name: Str. Worksheet to read
+        data_xl_path:     Str. Path to Excel "store anlegg" file from SSB
+        data_sheet_name:  Str. Worksheet to read in 'data_xl_path'
+        types_xl_path:    Str. Path to Excel file with treatment types. Usually delivered in
+                          a file named 'RID_Totalpopulasjon_{year}.csv', which should be
+                          checked and converted to Excel
+        types_sheet_name: Str. Worksheet to read in 'types_xl_path'
 
     Returns
         Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
         site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
         site.
     """
-    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
-    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+    assert isinstance(data_xl_path, str), "'data_xl_path' must be a valid file path."
+    assert isinstance(data_sheet_name, str), "'data_sheet_name' must be a string."
+    assert isinstance(types_xl_path, str), "'data_xl_path' must be a valid file path."
+    assert isinstance(types_sheet_name, str), "'data_sheet_name' must be a string."
 
-    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    df = pd.read_excel(data_xl_path, sheet_name=data_sheet_name)
     df.dropna(how="all", inplace=True)
     df["type"] = "Wastewater"
 
@@ -887,26 +896,37 @@ def read_raw_large_wastewater_data(xl_path, sheet_name):
     loc_gdf = loc_gdf.to_crs("epsg:25833")
     loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
     loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.set_geometry("geom", inplace=True)
     loc_gdf.reset_index(drop=True, inplace=True)
 
     # Get cols of interest
     df = df[["ANLEGGSNR", "MENGDE_P_UT_kg", "MENGDE_N_UT_kg"]]
+    df.columns = ["site_id", "TOTP_kg", "TOTN_kg"]
 
-    # Use var names from miljøgifter dataset, so it's easy to identify duplicates lates
-    df.columns = ["site_id", "KONSMENGDTOTP10_kg", "KONSMENGDTOTN10_kg"]
-    df = df.melt(id_vars="site_id").dropna(subset="value")
+    # Join treatment types
+    typ_df = pd.read_excel(types_xl_path, sheet_name=types_sheet_name)
+    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS"]]
+    typ_df.columns = ["site_id", "treatment_type"]
+    typ_df.dropna(how="all", inplace=True)
+    typ_df["treatment_type"].replace({"?": "Annen rensing"}, inplace=True)
+    df = pd.merge(df, typ_df, how="left", on="site_id")
+    df["treatment_type"].fillna("Annen rensing", inplace=True)
 
     return loc_gdf, df
 
 
-def read_raw_miljogifter_data(xl_path, sheet_name):
+def read_raw_miljogifter_data(xl_path, sheet_name, types_xl_path, types_sheet_name):
     """Reads the raw, not-gap-filled data for all variables from "large" (>50 p.e.)
     wastewater treatment sites. Also provided by SSB. Note that the 'miljøgifter'
     dataset includes some data that is duplicated in the "store anlegg" dataset.
 
     Args
-        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
-        sheet_name: Str. Worksheet to read
+        data_xl_path:     Str. Path to Excel "store anlegg" file from SSB
+        data_sheet_name:  Str. Worksheet to read in 'data_xl_path'
+        types_xl_path:    Str. Path to Excel file with treatment types. Usually delivered in
+                          a file named 'RID_Totalpopulasjon_{year}.csv', which should be
+                          checked and converted to Excel
+        types_sheet_name: Str. Worksheet to read in 'types_xl_path'
 
     Returns
         Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
@@ -947,6 +967,7 @@ def read_raw_miljogifter_data(xl_path, sheet_name):
     loc_gdf = loc_gdf.to_crs("epsg:25833")
     loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
     loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.set_geometry("geom", inplace=True)
     loc_gdf.reset_index(drop=True, inplace=True)
 
     # Get discharge cols of interest
@@ -954,8 +975,8 @@ def read_raw_miljogifter_data(xl_path, sheet_name):
         "KONSMENGD5BOF10",
         "KONSMENGDKOF10",
         "KONSMENGDSS10",
-        "KONSMENGDTOTN10",
-        "KONSMENGDTOTP10",
+        # "KONSMENGDTOTN10",  # Included in 'store anlegg' dataset
+        # "KONSMENGDTOTP10",  # Included in 'store anlegg' dataset
         "MILJOGIFTAS2",
         "MILJOGIFTCD2",
         "MILJOGIFTCR2",
@@ -968,7 +989,17 @@ def read_raw_miljogifter_data(xl_path, sheet_name):
     df = df[["ANLEGGSNR"] + cols]
     df.dropna(subset=cols, how="all", inplace=True)
     df.columns = ["site_id"] + [f"{col}_kg" for col in cols]
-    df = df.melt(id_vars="site_id").dropna(subset="value")
+
+    # Join treatment types
+    typ_df = pd.read_excel(types_xl_path, sheet_name=types_sheet_name)
+    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS"]]
+    typ_df.columns = ["site_id", "treatment_type"]
+    typ_df.dropna(how="all", inplace=True)
+    typ_df["treatment_type"].replace({"?": "Annen rensing"}, inplace=True)
+    df = pd.merge(df, typ_df, how="left", on="site_id")
+    df["treatment_type"].fillna("Annen rensing", inplace=True)
+
+    # df = df.melt(id_vars="site_id").dropna(subset="value")
 
     return loc_gdf, df
 
@@ -977,7 +1008,7 @@ def read_raw_industry_data(xl_path, sheet_name):
     """Reads the raw industry data provided by Miljødirektoratet.
 
     Args
-        xl_path:    Str. Path to Excel file from Fiskeridirektoratet
+        xl_path:    Str. Path to Excel file from Miljødirektoratet
         sheet_name: Str. Worksheet to read
 
     Returns
@@ -1022,6 +1053,7 @@ def read_raw_industry_data(xl_path, sheet_name):
     loc_gdf = loc_gdf.to_crs("epsg:25833")
     loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
     loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.set_geometry("geom", inplace=True)
     loc_gdf.reset_index(drop=True, inplace=True)
 
     # Get discharge cols of interest
@@ -1043,6 +1075,9 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
         ├─ avlop_stor_anlegg_{year}_raw.xlsx
         │  ├─ store_anlegg_{year} [worksheet]
         │
+        ├─ avlop_stor_anlegg_{year}_treatment_types.xlsx
+        │  ├─ data [worksheet]
+        │
         ├─ avlop_miljogifter_{year}_raw.xlsx
         │  ├─ miljogifter_{year} [worksheet]
         │
@@ -1050,14 +1085,14 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
         │  ├─ industry_{year} [worksheet]
 
     This function reads all the raw files and combines site locations and data values
-    into a geodataframe and a dataframe, respectively. Parameter names are mapped to
-    input parameter IDs in the database, and duplicates are removed. Sites without
-    coordinates are highlighted, and the database is chekced to identify new sites
-    to be uploaded.
+    into a geodataframe and a dataframe, respectively. Subfractions of TOTN and TOTP
+    are estimated, along with SS and TOC. Parameter names are mapped to input parameter
+    IDs in the database, and duplicates are removed. Sites without coordinates are
+    highlighted, and the database is checked to identify new sites to be uploaded.
 
     Args
         data_fold: Str. Folder containg raw data files, with the file structure as
-                   describedabove
+                   described above
         year:      Int. Year being processed
         eng:       Obj. Active database connection object connected to PostGIS
 
@@ -1072,18 +1107,36 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
 
     # Read raw data
     stan_path = os.path.join(data_fold, f"avlop_stor_anlegg_{year}_raw.xlsx")
-    stan_loc_gdf, stan_df = read_raw_large_wastewater_data(
-        stan_path, f"store_anlegg_{year}"
-    )
     miljo_path = os.path.join(data_fold, f"avlop_miljogifter_{year}_raw.xlsx")
-    miljo_loc_gdf, miljo_df = read_raw_miljogifter_data(
-        miljo_path, f"miljogifter_{year}"
-    )
     ind_path = os.path.join(data_fold, f"industry_{year}_raw.xlsx")
+    treat_types_path = os.path.join(
+        data_fold, f"avlop_stor_anlegg_{year}_treatment_types.xlsx"
+    )
+    stan_loc_gdf, stan_df = read_raw_large_wastewater_data(
+        stan_path,
+        f"store_anlegg_{year}",
+        treat_types_path,
+        "data",
+    )
+    miljo_loc_gdf, miljo_df = read_raw_miljogifter_data(
+        miljo_path,
+        f"miljogifter_{year}",
+        treat_types_path,
+        "data",
+    )
     ind_loc_gdf, ind_df = read_raw_industry_data(ind_path, f"industry_{year}")
+
+    # Subdivide TOTN and TOTP for 'store anlegg'
+    stan_df = subdivide_point_source_n_and_p(
+        stan_df, "Large wastewater", "TOTN_kg", "TOTP_kg"
+    )
+
+    # Estimate TOC from BOF and KOF
+    miljo_df = estimate_toc_from_bof_kof(miljo_df, "Large wastewater")
 
     # Combine 'values' dfs
     df = pd.concat([stan_df, miljo_df, ind_df], axis="rows")
+    df = df.query("value > 0")
 
     # Convert to par_ids used in database
     sql = text(
@@ -1099,8 +1152,16 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
     db_pars = list(par_map.keys())
     df = df.query("variable in @db_pars").copy()
 
-    # Drop duplicates due to the same data being present in "store anlegg" and miljøgifter
-    df.drop_duplicates(subset=["site_id", "variable"], inplace=True)
+    # Check for duplicates and drop if necessary
+    dup_df = df[df.duplicated(subset=["site_id", "variable"], keep=False)].sort_values(
+        by=["site_id", "variable"]
+    )
+    if len(dup_df) > 0:
+        print(
+            f"WARNING: {len(dup_df)} duplicates identified (see below). Only the first will be kept."
+        )
+        print(dup_df)
+        df.drop_duplicates(subset=["site_id", "variable"], keep="first", inplace=True)
 
     # Convert to db IDs
     df["in_par_id"] = df["variable"].map(par_map)
@@ -1148,6 +1209,7 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
     not_in_db_gdf = loc_gdf[loc_gdf["site_id"].isin(list(not_in_db))].drop_duplicates(
         subset=["site_id"]
     )
+    not_in_db_gdf.set_geometry("geom", inplace=True)
     not_in_db_gdf.reset_index(inplace=True, drop=True)
     if len(not_in_db_gdf) > 0:
         not_in_db_no_coords_gdf = not_in_db_gdf[
@@ -1202,7 +1264,22 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     ].is_unique, f"Dataset contains duplicated kommuner: {list(df['komnr'].unique())}"
     df["komnr"].replace({"1245": "1246"}, inplace=True)
     df = df.groupby("komnr").sum().reset_index()
-    df = df[["komnr", "P_kg", "N_kg"]]
+
+    # Restructure data
+    df = df.melt(id_vars="komnr")
+    df["variable"] = df["variable"].str.replace("FOSFOR ", "TOTP_kg;")
+    df["variable"] = df["variable"].str.replace("NITROGEN ", "TOTN_kg;")
+    df[["variable", "treatment_type"]] = df["variable"].str.split(";", 1, expand=True)
+    # Ignore 'Tett tank (for alt avløpsvann)' as it is always zero (it's transported to the "large" plants)
+    df = df.query("treatment_type != 'Tett tank (for alt avløpsvann)'")
+    df.set_index(["komnr", "variable", "treatment_type"], inplace=True)
+    df = df.unstack("variable")
+    df.columns = df.columns.get_level_values(1)
+    df.reset_index(inplace=True)
+    df.index.name = ""
+
+    # Subdivide TOTN and TOTP
+    df = subdivide_point_source_n_and_p(df, "Small wastewater", "TOTN_kg", "TOTP_kg")
 
     # Check komnrs in SSB data are found in the admin data for this year
     not_in_db = set(df["komnr"].values) - set(reg_kom_df["komnr"].values)
@@ -1223,5 +1300,129 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     df = pd.melt(df, id_vars="komnr", var_name="in_par_id", value_name="value")
     df["year"] = year
     df = df[["komnr", "in_par_id", "year", "value"]]
+
+    return df
+
+
+def subdivide_point_source_n_and_p(df, site_type, totn_col, totp_col):
+    """Subdivide TOTN and TOTP from wastewater, industry or aquaculture. Uses typical
+    fractions for different types of treatment plant, based on Christian Vogelsang's
+    literature review. See the file here for details:
+
+    https://github.com/NIVANorge/teotil3/blob/main/data/point_source_treatment_types.csv
+
+    Args
+        df:        Dataframe of discharges. Must include columns for site or kommune ID,
+                   treatment type, TOTN and TOTP
+        site_type: Str. Type of sites being processed. Must be one of
+                   ["Large wastewater", "Small wastewater", "Industry", "Aquaculture"]
+        totn_col:  Str. Name of column in 'df' with TOTN data
+        totp_col:  Str. Name of column in 'df' with TOTP data
+
+    Returns
+        Dataframe in long format with columns 'site_id', 'variable' and 'value'.
+    """
+    assert isinstance(totn_col, str), "'totn_col' must be a string."
+    assert isinstance(totp_col, str), "'totp_col' must be a string."
+    site_types = ["Large wastewater", "Small wastewater", "Industry", "Aquaculture"]
+    assert site_type in site_types, f"{site_type} must be one of {site_types}."
+
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/point_source_treatment_types.csv"
+    prop_df = pd.read_csv(url)
+    prop_df = prop_df.query("site_type == @site_type")
+
+    assert (
+        prop_df["prop_din"] + prop_df["prop_ton"] == 1
+    ).all(), "Proportions for DIN and TON do not sum to one."
+    assert (
+        prop_df["prop_tpp"] + prop_df["prop_tdp"] == 1
+    ).all(), "Proportions for TPP and TDP do not sum to one."
+    assert set(df["treatment_type"]).issubset(
+        set(prop_df["treatment_type"])
+    ), f"'df' contains unknown treatment types: {set(df['treatment_type']) - set(prop_df['treatment_type'])}."
+
+    df = pd.merge(df, prop_df, how="left", on="treatment_type")
+
+    fracs = ["DIN", "TON", "TPP", "TDP"]
+    for frac in fracs:
+        if frac[-1] == "N":
+            tot_col = totn_col
+        else:
+            tot_col = totp_col
+        unit = tot_col.split("_")[-1]
+        df[f"{frac}_{unit}"] = df[tot_col] * df[f"prop_{frac.lower()}"]
+
+    # Delete unnecessary cols
+    for col in prop_df.columns:
+        del df[col]
+
+    if site_type == "Small wastewater":
+        df = df.groupby("komnr").sum().reset_index()
+    else:
+        df = df.melt(id_vars="site_id").dropna(subset="value")
+
+    return df
+
+
+def estimate_toc_from_bof_kof(df, site_type):
+    """Estimate TOC from KOF and/or BOF. Applies to the 'miljøgifter' (i.e. "large" wastewater") and
+    'industry' datasets. For each treatment type, uses the best relationship identified by Christian
+    Vogelsang to predict from TOC from either KOF or BOF. All relationships have the form
+
+        TOC = k1 * KOF^k2 + k3 or TOC = b1 * BOF^b2 + b3
+    
+    where the k_i and b_i are taken from the CSV here (based on Chrtistian's literature review)
+
+    https://github.com/NIVANorge/teotil3/blob/main/data/point_source_treatment_types.csv
+
+    Args
+        df:        Dataframe of discharges. Must include columns for site, treatment type and BOF/KOF
+        site_type: Str. Type of sites being processed. Must be one of
+                   ["Large wastewater", "Industry"]
+
+    Returns
+        Dataframe in long format with columns 'site_id', 'variable' and 'value'.
+    """
+    site_types = ["Large wastewater", "Industry"]
+    assert site_type in site_types, f"{site_type} must be one of {site_types}."
+
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/point_source_treatment_types.csv"
+    prop_df = pd.read_csv(url)
+    prop_df = prop_df.query("site_type == @site_type")
+
+    assert set(df["treatment_type"]).issubset(
+        set(prop_df["treatment_type"])
+    ), f"'df' contains unknown treatment types: {set(df['treatment_type']) - set(prop_df['treatment_type'])}."
+
+    if site_type == "Large wastewater":
+        bof_col = "KONSMENGD5BOF10"
+        kof_col = "KONSMENGDKOF10"
+        unit = "kg"
+    else:
+        bof_col = "BOF5"
+        kof_col = "KOF"
+        unit = "tonnes"
+
+    df = pd.merge(df, prop_df, how="left", on="treatment_type")
+
+    # Estimate TOC. Use BOF if available, otherwise KOF
+    df[f"TOC_BOF_{unit}"] = (df["b1"] * (df[f"{bof_col}_{unit}"] ** df["b2"])) + df[
+        "b3"
+    ]
+    df[f"TOC_KOF_{unit}"] = (df["k1"] * (df[f"{kof_col}_{unit}"] ** df["k2"])) + df[
+        "k3"
+    ]
+    if f"TOC_{unit}" in df.columns:
+        df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_BOF_{unit}"])
+    else:
+        df[f"TOC_{unit}"] = df[f"TOC_BOF_{unit}"]
+    df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_KOF_{unit}"])
+    del df["TOC_BOF_kg"], df["TOC_KOF_kg"]
+
+    # Delete unnecessary cols
+    for col in prop_df.columns:
+        del df[col]
+
+    df = df.melt(id_vars="site_id").dropna(subset="value")
 
     return df
