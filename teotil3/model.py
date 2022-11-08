@@ -5,6 +5,7 @@ from collections import defaultdict
 # import graphviz
 # import matplotlib.pyplot as plt
 import networkx as nx
+
 # import numpy as np
 import pandas as pd
 
@@ -40,7 +41,7 @@ def build_graph(df, id_col="regine", next_down_col="regine_down"):
     return g
 
 
-def run_model(data, id_col="regine", next_down_col="regine_down"):
+def run_model(data, id_col="regine", next_down_col="regine_down", sum_subfracs=False):
     """Run the TEOTIL2 model with the specified inputs. 'data' must either be a
     dataframe or a file path to a CSV in the correct format e.g. the dataframe
     or CSV returned by make_input_file(). See below for format details.
@@ -65,6 +66,9 @@ def run_model(data, id_col="regine", next_down_col="regine_down"):
                        catchments
         next_down_col: Str. Default 'regine_down'. Column in 'df' with ID of
                        catchment immediately downstream
+        sum_subfracs:  Check whether results include subfractions of N and P and,
+                       if so, sum them for each source to give results for TOTN
+                       and TOTP
 
     Returns
         NetworkX graph object with results added as node attributes.
@@ -106,6 +110,8 @@ def run_model(data, id_col="regine", next_down_col="regine_down"):
     # Run model
     g = build_graph(df, id_col=id_col, next_down_col=next_down_col)
     g = accumulate_loads(g, acc_cols)
+    if sum_subfracs:
+        g = sum_subfractions(g, acc_cols)
 
     return g
 
@@ -176,6 +182,66 @@ def accumulate_loads(g, acc_cols):
                 g.nodes[nd]["accum"][col] = (
                     g.nodes[nd]["local"][col] * g.nodes[nd]["local"]["trans_%s" % par]
                 )
+
+    return g
+
+
+def sum_subfractions(g, acc_cols):
+    """Checks whether nodes in 'g' contain results for ('din_kg' or 'ton_kg'), or
+    ('tdp_kg' or 'tpp_kg'). If they do, new 'local' and 'accum' attributes are added
+    by summing the subfractions for each parameter from each source.
+
+    Args
+        g:        Networkx graph object of model results
+        acc_cols: List of str. Parameter named ('{source}_{par}_{unit}') accumulated
+                  in 'g'
+
+    Returns
+        'g' is updated with new node attributes.
+    """
+    # Get sources for which N & P totals can be calculated
+    subfrac_list = ["din", "ton", "tdp", "tpp"]
+    sources = set(
+        [
+            "_".join(col.split("_")[:-2])
+            for col in acc_cols
+            if col.split("_")[-2] in subfrac_list
+        ]
+    )
+
+    # Loop over graph
+    for nd in g.nodes():
+        for source in sources:
+            if "local" in g.nodes[nd]:
+                n_cols = [
+                    f"{source}_{frac}_kg"
+                    for frac in ["din", "ton"]
+                    if f"{source}_{frac}_kg" in acc_cols
+                ]
+                g.nodes[nd]["local"][f"{source}_totn_kg"] = 0
+                g.nodes[nd]["accum"][f"{source}_totn_kg"] = 0
+                for col in n_cols:
+                    g.nodes[nd]["local"][f"{source}_totn_kg"] += g.nodes[nd]["local"][
+                        col
+                    ]
+                    g.nodes[nd]["accum"][f"{source}_totn_kg"] += g.nodes[nd]["accum"][
+                        col
+                    ]
+
+                p_cols = [
+                    f"{source}_{frac}_kg"
+                    for frac in ["tdp", "tpp"]
+                    if f"{source}_{frac}_kg" in acc_cols
+                ]
+                g.nodes[nd]["local"][f"{source}_totp_kg"] = 0
+                g.nodes[nd]["accum"][f"{source}_totp_kg"] = 0
+                for col in p_cols:
+                    g.nodes[nd]["local"][f"{source}_totp_kg"] += g.nodes[nd]["local"][
+                        col
+                    ]
+                    g.nodes[nd]["accum"][f"{source}_totp_kg"] += g.nodes[nd]["accum"][
+                        col
+                    ]
 
     return g
 
