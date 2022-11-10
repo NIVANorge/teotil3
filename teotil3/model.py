@@ -5,7 +5,6 @@ from collections import defaultdict
 # import graphviz
 # import matplotlib.pyplot as plt
 import networkx as nx
-
 # import numpy as np
 import pandas as pd
 
@@ -41,7 +40,7 @@ def build_graph(df, id_col="regine", next_down_col="regine_down"):
     return g
 
 
-def run_model(data, id_col="regine", next_down_col="regine_down", sum_subfracs=False):
+def run_model(data, id_col="regine", next_down_col="regine_down", totals_from_subfracs=True):
     """Run the TEOTIL2 model with the specified inputs. 'data' must either be a
     dataframe or a file path to a CSV in the correct format e.g. the dataframe
     or CSV returned by make_input_file(). See below for format details.
@@ -50,25 +49,31 @@ def run_model(data, id_col="regine", next_down_col="regine_down", sum_subfracs=F
     and accumulated downstream, allowing for retention.
 
     Args
-        data:          Str or dataframe e.g. as returned by make_input_file().
-                       The following columns are mandatory:
+        data:                Str or dataframe e.g. as returned by make_input_file().
+                             The following columns are mandatory:
 
-                           [id_col, next_down_col, "a_cat_land_km2",
-                            "runoff_mm/yr", "q_cat_m3/s"]
+                                 [id_col, next_down_col, "a_cat_land_km2",
+                                 "runoff_mm/yr", "q_cat_m3/s"]
 
-                       Additional columns to be accumulated must be named
-                       '{source}_{par}_{unit}', all in lowercase e.g.
-                       'ind_cd_tonnes' for industrial point inputs of cadmium in
-                       tonnes. In addition, there must be a corresponding column
-                       named 'trans_{par}' containing transmission factors
-                       (floats between 0 and 1)
-        id_col:        Str. Default 'regine'. Column in 'df' with unique IDs for
-                       catchments
-        next_down_col: Str. Default 'regine_down'. Column in 'df' with ID of
-                       catchment immediately downstream
-        sum_subfracs:  Check whether results include subfractions of N and P and,
-                       if so, sum them for each source to give results for TOTN
-                       and TOTP
+                             Additional columns to be accumulated must be named
+                             '{source}_{par}_{unit}', all in lowercase e.g.
+                             'ind_cd_tonnes' for industrial point inputs of cadmium in
+                              tonnes. In addition, there must be a corresponding column
+                              named 'trans_{par}' containing transmission factors
+                              (floats between 0 and 1)
+        id_col:               Str. Default 'regine'. Column in 'df' with unique IDs for
+                              catchments
+        next_down_col:        Str. Default 'regine_down'. Column in 'df' with ID of
+                              catchment immediately downstream
+        totals_from_subfracs: Bool. Check whether results include subfractions of N and P 
+                              and, if so, sum them for each source to give results for TOTN
+                              and TOTP. If the input dataset already includes data for
+                              TOTN or TOTP, these values will be overwritten. If the
+                              input data includes TOTN and TOTP and 'totals_from_subfracs'
+                              is False, retention will be estimated using Vollenweider
+                              retention curves for TOTN and TOTP. Note that this NOT the 
+                              same as using Vollenweider for the subfractions and then 
+                              summing them - see development notebook 2.5a for details
 
     Returns
         NetworkX graph object with results added as node attributes.
@@ -110,7 +115,7 @@ def run_model(data, id_col="regine", next_down_col="regine_down", sum_subfracs=F
     # Run model
     g = build_graph(df, id_col=id_col, next_down_col=next_down_col)
     g = accumulate_loads(g, acc_cols)
-    if sum_subfracs:
+    if totals_from_subfracs:
         g = sum_subfractions(g, acc_cols)
 
     return g
