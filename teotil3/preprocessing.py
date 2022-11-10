@@ -371,9 +371,9 @@ def calculate_regine_retention(df, regine_col, pars):
     for col in trans_cols:
         assert col in df.columns, f"'{col}' not found in 'df'."
 
-    reg_df = df.groupby(regine_col).prod()[trans_cols].reset_index()
+    reg_df = df.groupby(regine_col).prod()[trans_cols].round(6).reset_index()
     for par in pars:
-        reg_df[f"ret_{par}"] = 1 - reg_df[f"trans_{par}"]
+        reg_df[f"ret_{par}"] = (1 - reg_df[f"trans_{par}"]).round(6)
 
     return reg_df
 
@@ -419,8 +419,8 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
 
     # Non-Vollenweider params for individual lakes
     # Original ret_n assumed to be 0.2*ret_totp
-    df["ret_orig-totn"] = 0.2 * df["ret_totp"]
-    df["trans_orig-totn"] = 1 - df["ret_orig-totn"]
+    # df["ret_orig-totn"] = 0.2 * df["ret_totp"]
+    # df["trans_orig-totn"] = 1 - df["ret_orig-totn"]
 
     # Aggregate to regine level
     pars = [col[6:] for col in df.columns if col.startswith("trans_")]
@@ -1370,7 +1370,7 @@ def estimate_toc_from_bof_kof(df, site_type):
     Vogelsang to predict from TOC from either KOF or BOF. All relationships have the form
 
         TOC = k1 * KOF^k2 + k3 or TOC = b1 * BOF^b2 + b3
-    
+
     where the k_i and b_i are taken from the CSV here (based on Chrtistian's literature review)
 
     https://github.com/NIVANorge/teotil3/blob/main/data/point_source_treatment_types.csv
