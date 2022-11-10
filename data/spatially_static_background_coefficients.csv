@@ -1,6 +1,8 @@
 variable,value
+urban_totn_µg/l,1000
 urban_din_µg/l,650
 urban_ton_µg/l,350
+urban_totp_µg/l,150
 urban_tdp_µg/l,70
 urban_tpp_µg/l,80
 urban_toc_µg/l,7000
