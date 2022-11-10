@@ -565,6 +565,10 @@ def make_input_file(
     engine,
     out_csv_fold=None,
     regine_year=2022,
+    nan_to_vass=True,
+    add_offshore=True,
+    order_coastal=False,
+    land_to_vass=True,
 ):
     """Builds an input file for the specified year. All the required data must be uploaded to
     the database.
@@ -577,6 +581,14 @@ def make_input_file(
         out_csv_fold:  None or Str. Default None. Path to folder where output CSV will be
                        created
         regine_year:   Int. Year defining regine dataset on which coefficients are based
+        nan_to_vass:   Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
+                       to determine hydrological connectivity
+        add_offshore:  Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
+                       to determine hydrological connectivity
+        order_coastal: Bool. Default False. Additional kwarg passed to 'assign_regine_hierarchy'
+                       to determine hydrological connectivity
+        land_to_vass:  Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
+                       to determine hydrological connectivity
 
     Returns
         Dataframe. The CSV is written to the specified folder.
@@ -617,10 +629,10 @@ def make_input_file(
         reg_gdf,
         regine_col="regine",
         regine_down_col="regine_down",
-        nan_to_vass=True,
-        add_offshore=True,
-        order_coastal=False,
-        land_to_vass=True,
+        nan_to_vass=nan_to_vass,
+        add_offshore=add_offshore,
+        order_coastal=order_coastal,
+        land_to_vass=land_to_vass,
     )
 
     if out_csv_fold:
