@@ -393,6 +393,8 @@ def rescale_annual_flows(reg_gdf, data_supply_year, year, engine):
     for col in ["runoff_mm/yr", "q_cat_m3/s"]:
         reg_gdf[col] = reg_gdf[col] * reg_gdf["flow_factor"]
         reg_gdf[col].fillna(value=0, inplace=True)
+    reg_gdf["runoff_mm/yr"] = reg_gdf["runoff_mm/yr"].round(0).astype(int)
+    reg_gdf["q_cat_m3/s"] = reg_gdf["q_cat_m3/s"].round(6)
     del reg_gdf["flow_factor"]
 
     return reg_gdf
@@ -494,22 +496,24 @@ def calculate_background_inputs(reg_gdf):
 
     # Calculations for "concentration-based" pars
     col_list = [
-        "wood_din_µg/l",
         "wood_totn_µg/l",
-        "wood_tdp_µg/l",
-        "wood_totp_µg/l",
-        "wood_toc_mg/l",
-        "upland_din_µg/l",
-        "upland_totn_µg/l",
-        "upland_tdp_µg/l",
-        "upland_totp_µg/l",
-        "upland_toc_mg/l",
+        "wood_din_µg/l",
         "wood_ton_µg/l",
+        "wood_totp_µg/l",
+        "wood_tdp_µg/l",
         "wood_tpp_µg/l",
+        "wood_toc_mg/l",
+        "upland_totn_µg/l",
+        "upland_din_µg/l",
         "upland_ton_µg/l",
+        "upland_totp_µg/l",
+        "upland_tdp_µg/l",
         "upland_tpp_µg/l",
+        "upland_toc_mg/l",
+        "urban_totn_µg/l",
         "urban_din_µg/l",
         "urban_ton_µg/l",
+        "urban_totp_µg/l",
         "urban_tdp_µg/l",
         "urban_tpp_µg/l",
         "urban_toc_µg/l",
@@ -529,7 +533,7 @@ def calculate_background_inputs(reg_gdf):
             * reg_gdf[f"a_{lc_class}_km2"]
             * reg_gdf["q_sp_l/km2"]
             / unit_fac
-        )
+        ).round(1)
         del reg_gdf[col]
     del reg_gdf["q_sp_l/km2"]
 
@@ -547,7 +551,9 @@ def calculate_background_inputs(reg_gdf):
         else:
             raise ValueError(f"Could not identify correct unit factor for {unit}.")
 
-        reg_gdf[f"{lc_class}_{par}_kg"] = reg_gdf[col] * reg_gdf[f"a_{lc_class}_km2"]
+        reg_gdf[f"{lc_class}_{par}_kg"] = (
+            reg_gdf[col] * reg_gdf[f"a_{lc_class}_km2"]
+        ).round(1)
         del reg_gdf[col]
 
     return reg_gdf
@@ -648,7 +654,18 @@ def make_input_file(
     return reg_gdf
 
 
-def get_annual_spredt_data(engine, year):
+def get_annual_spredt_data(
+    engine,
+    year,
+    par_list=[
+        "totn_kg",
+        "din_kg",
+        "ton_kg",
+        "totp_kg",
+        "tdp_kg",
+        "tpp_kg",
+    ],
+):
     """Get annual 'spredt' data for each kommune. 'spredt' comprises wastewater treatment discharges
     from sources not connected to the main sewerage network (septic tanks etc.) or from 'små anlegg'
     sites that are too small (< 50 p.e.) to be reported individually.
@@ -656,6 +673,9 @@ def get_annual_spredt_data(engine, year):
     Args
         year:     Int. Year of interest
         engine:   SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        par_list: List of parameters to consider. If None, returns data for all parameters
+                  in the database. The default is the basic set of parameters considered
+                  by TEOTIL3.
 
     Returns
         Dataframe of spredt data
@@ -687,6 +707,11 @@ def get_annual_spredt_data(engine, year):
         cols = [f"spredt_{col.lower()}" for col in df.columns]
         df.columns = cols
         df.columns.name = ""
+        if par_list:
+            cols = [
+                f"spredt_{col}" for col in par_list if f"spredt_{col}" in df.columns
+            ]
+            df = df[cols]
         df.reset_index(inplace=True)
 
         assert pd.isna(df).sum().sum() == 0
@@ -774,27 +799,39 @@ def get_annual_point_data(
                 for col in par_list
                 if f"{source_type}_{col}" in df.columns
             ]
-            df = df[cols]
+            df = df[cols].round(1)
         df.reset_index(inplace=True)
 
         return df
 
 
-def assign_spredt_to_regines(reg_gdf, spr_df):
+def assign_spredt_to_regines(
+    reg_gdf,
+    spr_df,
+    par_list=[
+        "totn_kg",
+        "din_kg",
+        "ton_kg",
+        "totp_kg",
+        "tdp_kg",
+        "tpp_kg",
+    ],
+):
     """Kommune level totals for spredt in 'spr_df' area are assigned to regines in 'reg_gdf'.
     Spredt is distributed evenly over all agricultural land in each kommune (if agricultural
     land exists) and otherwise it is simply distributed evenly over all land.
 
     Args
-        reg_gdf: Geodataframe of regine data.
-        spr_df:  dataframe of kommune level spredt data
+        reg_gdf:  Geodataframe of regine data.
+        spr_df:   dataframe of kommune level spredt data
+        par_list: List of parameters to consider. If None, returns data for all parameters
+                  in the database. The default is the basic set of parameters considered
+                  by TEOTIL3.
 
     Returns
         Geodataframe. New columns are added to 'reg_gdf' indicting the spredt inputs to each
         regine.
     """
-    par_list = ["totn_kg", "totp_kg"]
-
     kom_df = reg_gdf[["komnr", "a_cat_land_km2", "a_agri_km2"]].copy()
     kom_df = kom_df.groupby("komnr").sum()
     kom_df.reset_index(inplace=True)
@@ -830,6 +867,6 @@ def assign_spredt_to_regines(reg_gdf, spr_df):
         axis="columns",
     )
     for par in par_list:
-        reg_gdf[f"spredt_{par}"].fillna(value=0, inplace=True)
+        reg_gdf[f"spredt_{par}"] = reg_gdf[f"spredt_{par}"].fillna(value=0).round(1)
 
     return reg_gdf
