@@ -23,14 +23,13 @@ Data processing and intermediate analysis for developing TEOTIL3.
 
  * [Notebook 2.5a: Estimating retention parameters](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5a_est_vollenweider_params_from_data.ipynb)
  * [Notebook 2.5b: Retention for regine catchments](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5b_retention_coefficients.ipynb)
- * [Notebook 2.5c: Exploring retention for large catchments](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5c_explore_vassom_retention.ipynb)
+ * [Notebook 2.5c: Exploring transmission of nutrients to the coast/border](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-5c_transmission_to_coast.ipynb)
  
 ### Task 2.7: Improve workflow for non-agricultural diffuse inputs
 
  * [Notebook 2.7a: The "1000 Lakes" dataset](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7a_non_agri_diffuse_inputs.ipynb)
  * [Notebook 2.7b: Spatial interpolation for woodland and upland areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7b_spatial_interpolation_skog_fjell.ipynb)
  * [Notebook 2.7c: Inputs from urban, glacial and lake areas](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7c_other_background_coeffs.ipynb)
- * [Notebook 2.7d: Exploring patterns in background inputs](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-7d_explore_background_inputs.ipynb)
 
 ### Task 2.8: Improve workflow for wastewater treatment and industry
 
@@ -39,3 +38,7 @@ Data processing and intermediate analysis for developing TEOTIL3.
 ### Task 2.9: Improve workflow for aquaculture
 
  * [Notebook 2.9: Aquaculture](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-9_improve_aquaculture_workflow.ipynb) 
+ 
+### Task 2.15: Testing, documentation and reporting
+
+ * [Notebook 2.15a: Compare TEOTIL2 vs TEOTIL3](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-15a_explore_input_output.ipynb)  
