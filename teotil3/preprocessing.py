@@ -631,7 +631,12 @@ def estimate_aquaculture_nutrient_inputs(
             1000 * cu_loss_tonnes * sum_df["TOTP_kg"] / sum_df["TOTP_kg"].sum()
         )
 
-    # Convert to par_ids and melt to format required by db
+    # Subdivide TOTN and TOTP
+    sum_df.reset_index(inplace=True)
+    sum_df["treatment_type"] = "None"
+    sum_df = subdivide_point_source_n_and_p(sum_df, "Aquaculture", "TOTN_kg", "TOTP_kg")
+
+    # Convert to db par_ids
     sql = text(
         """SELECT in_par_id,
              CONCAT_WS('_', name, unit) AS par_unit
@@ -641,11 +646,7 @@ def estimate_aquaculture_nutrient_inputs(
     input_par_df = pd.read_sql(sql, eng)
     par_map = input_par_df.set_index("par_unit").to_dict()["in_par_id"]
 
-    sum_df.rename(par_map, axis="columns", inplace=True)
-    sum_df.reset_index(inplace=True)
-    sum_df = pd.melt(
-        sum_df, id_vars="site_id", var_name="in_par_id", value_name="value"
-    )
+    sum_df["in_par_id"] = sum_df["variable"].map(par_map)
     sum_df["year"] = year
     sum_df = sum_df[["site_id", "in_par_id", "year", "value"]]
 
