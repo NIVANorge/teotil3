@@ -1,25 +1,51 @@
-site_type,treatment_type,prop_din,prop_ton,prop_tpp,prop_tdp,k1,k2,k3,b1,b2,b3
-Large wastewater,Urenset,0.65,0.35,0.67,0.33,0.23,1,0,0.6,1,0
-Large wastewater,Mekanisk - slamavskiller,0.68,0.32,0.35,0.65,0.23,1,0,0.6,1,0
-Large wastewater,"Mekanisk - sil, rist",0.68,0.32,0.55,0.45,0.23,1,0,0.6,1,0
-Large wastewater,Mekanisk,0.68,0.32,0.45,0.55,0.23,1,0,0.6,1,0
-Large wastewater,Kjemisk,0.72,0.28,0.87,0.13,0.33,1,0,0.65,1,6.7
-Large wastewater,Biologisk,0.87,0.13,0.56,0.44,0.38,1,0,12.351,0.143,0
-Large wastewater,Kjemisk-biologisk,0.90,0.10,0.87,0.13,5.1445,0.24,0,8.302,0.224,0
-Large wastewater,Kjemisk-biologisk m/N-fjerning,0.76,0.24,0.55,0.45,5.1445,0.24,0,8.302,0.224,0
-Large wastewater,Naturbasert,0.91,0.09,0.66,0.34,5.1445,0.24,0,8.302,0.224,0
-Large wastewater,Annen rensing,0.76,0.24,0.61,0.39,0.23,1,0,0.6,1,0
-Small wastewater,Direkte utslipp,0.65,0.35,0.67,0.33,,,,,,
-Small wastewater,Slamavskiller,0.68,0.32,0.35,0.65,,,,,,
-Small wastewater,Infiltrasjonsanlegg,0.90,0.10,0.87,0.13,,,,,,
-Small wastewater,Sandfilteranlegg,0.87,0.13,0.56,0.44,,,,,,
-Small wastewater,Biologisk,0.87,0.13,0.56,0.44,,,,,,
-Small wastewater,Kjemisk,0.72,0.28,0.87,0.13,,,,,,
-Small wastewater,Biologisk og kjemisk,0.90,0.10,0.87,0.13,,,,,,
-Small wastewater,Tett tank for svartvann,0.20,0.80,0.35,0.65,,,,,,
-Small wastewater,Biologisk toalett,0.20,0.80,0.35,0.65,,,,,,
-Small wastewater,Konstruert våtmark,0.90,0.10,0.66,0.34,,,,,,
-Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.30,0.70,0.66,0.34,,,,,,
-Small wastewater,"Biologisk toalett, gråvannsfilter",0.30,0.70,0.66,0.34,,,,,,
-Small wastewater,Annen løsning,0.62,0.38,0.62,0.38,,,,,,
-Aquaculture,None,0.69,0.31,0.71,0.29,,,,,,
+site_type,treatment_type,prop_din,prop_ton,prop_tpp,prop_tdp,kof_fac,bof_fac
+Large wastewater,Urenset,0.65,0.35,0.67,0.33,0.23,0.6
+Large wastewater,Mekanisk - slamavskiller,0.68,0.32,0.35,0.65,0.23,0.6
+Large wastewater,"Mekanisk - sil, rist",0.68,0.32,0.55,0.45,0.23,0.6
+Large wastewater,Mekanisk,0.68,0.32,0.45,0.55,0.23,0.6
+Large wastewater,Kjemisk,0.72,0.28,0.87,0.13,0.33,0.9
+Large wastewater,Biologisk,0.87,0.13,0.56,0.44,0.38,1.8
+Large wastewater,Kjemisk-biologisk,0.9,0.1,0.87,0.13,0.32,1.8
+Large wastewater,Kjemisk-biologisk m/N-fjerning,0.76,0.24,0.55,0.45,0.32,1.8
+Large wastewater,Naturbasert,0.91,0.09,0.66,0.34,0.32,1.8
+Large wastewater,Annen rensing,0.76,0.24,0.61,0.39,0.29,1.2
+Small wastewater,Direkte utslipp,0.65,0.35,0.67,0.33,,
+Small wastewater,Slamavskiller,0.68,0.32,0.35,0.65,,
+Small wastewater,Infiltrasjonsanlegg,0.9,0.1,0.87,0.13,,
+Small wastewater,Sandfilteranlegg,0.87,0.13,0.56,0.44,,
+Small wastewater,Biologisk,0.87,0.13,0.56,0.44,,
+Small wastewater,Kjemisk,0.72,0.28,0.87,0.13,,
+Small wastewater,Biologisk og kjemisk,0.9,0.1,0.87,0.13,,
+Small wastewater,Tett tank for svartvann,0.2,0.8,0.35,0.65,,
+Small wastewater,Biologisk toalett,0.2,0.8,0.35,0.65,,
+Small wastewater,Konstruert våtmark,0.9,0.1,0.66,0.34,,
+Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.3,0.7,0.66,0.34,,
+Small wastewater,"Biologisk toalett, gråvannsfilter",0.3,0.7,0.66,0.34,,
+Small wastewater,Annen løsning,0.62,0.38,0.62,0.38,,
+Industry,Annen aktivitet,0.0,1.0,0.5,0.5,0.15,0.5
+Industry,Avfallsforbrenning,1.0,0.0,0.5,0.5,0.2,0.5
+Industry,Brannøvingsplass,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Farlig avfall - behandling,1.0,0.0,0.5,0.5,0.23,0.3
+Industry,Fiskeforedling,0.0,1.0,0.5,0.5,0.2,0.4
+Industry,Flyplass,0.5,0.5,0.5,0.5,0.33,0.5
+Industry,Forbrenningsanlegg for rene brensler,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Fôrproduksjon,0.0,1.0,0.5,0.5,0.24,1.1
+Industry,Gjenvinning av metall- og EE-avfall,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Kjemisk industri,0.1,0.9,0.5,0.5,0.2,0.5
+Industry,Kjemisk/elektrolytisk overflatebehandling,0.1,0.9,0.5,0.5,0.2,0.5
+Industry,Krematorium,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Mekanisk overflatebehandling og verft,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Metallurgisk industri,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,"Mineralsk industri, unntatt pukkverk",1.0,0.0,0.5,0.5,0.2,0.5
+Industry,"Næringsmiddelindustri, unntatt fiskeforedling",0.0,1.0,0.5,0.5,0.2,0.3
+Industry,Olje- og gassvirksomhet på land,0.23,0.77,0.5,0.5,0.2,0.5
+Industry,Plast- og glassfiberprodukter,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Pukkverk,1.0,0.0,0.5,0.5,0.2,0.5
+Industry,Skipsgjenvinning,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Skyte- og øvingsfelt,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Skytebaner,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Tanklagring,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,"Tekstil-, skinn- og tauprodukter",1.0,0.0,0.5,0.5,0.2,0.5
+Industry,Treforedling,0.3,0.7,0.5,0.5,0.2,0.5
+Industry,Vaskeri og renseri,0.5,0.5,0.5,0.5,0.2,0.5
+Aquaculture,None,0.69,0.31,0.71,0.29,,
