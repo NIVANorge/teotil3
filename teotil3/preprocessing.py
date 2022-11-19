@@ -904,30 +904,28 @@ def read_raw_large_wastewater_data(
     df = df[["ANLEGGSNR", "MENGDE_P_UT_kg", "MENGDE_N_UT_kg"]]
     df.columns = ["site_id", "TOTP_kg", "TOTN_kg"]
 
-    # Join treatment types
+    # Join treatment types, BOF5 and KOF
     typ_df = pd.read_excel(types_xl_path, sheet_name=types_sheet_name)
-    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS"]]
-    typ_df.columns = ["site_id", "treatment_type"]
+    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS", "utslipp_BOF5", "utslipp_KOF"]]
+    typ_df.columns = ["site_id", "treatment_type", "BOF5_kg", "KOF_kg"]
     typ_df.dropna(how="all", inplace=True)
     typ_df["treatment_type"].replace({"?": "Annen rensing"}, inplace=True)
     df = pd.merge(df, typ_df, how="left", on="site_id")
     df["treatment_type"].fillna("Annen rensing", inplace=True)
+    df["BOF5_kg"].fillna(0, inplace=True)
+    df["KOF_kg"].fillna(0, inplace=True)
 
     return loc_gdf, df
 
 
-def read_raw_miljogifter_data(xl_path, sheet_name, types_xl_path, types_sheet_name):
-    """Reads the raw, not-gap-filled data for all variables from "large" (>50 p.e.)
-    wastewater treatment sites. Also provided by SSB. Note that the 'miljøgifter'
-    dataset includes some data that is duplicated in the "store anlegg" dataset.
+def read_raw_miljogifter_data(xl_path, sheet_name):
+    """Reads the raw, not-gap-filled data for "large" (>50 p.e.) wastewater treatment
+    sites. Provided by SSB. Note that the 'miljøgifter' dataset includes some data
+    that is duplicated in the "store anlegg" dataset.
 
     Args
         data_xl_path:     Str. Path to Excel "store anlegg" file from SSB
         data_sheet_name:  Str. Worksheet to read in 'data_xl_path'
-        types_xl_path:    Str. Path to Excel file with treatment types. Usually delivered in
-                          a file named 'RID_Totalpopulasjon_{year}.csv', which should be
-                          checked and converted to Excel
-        types_sheet_name: Str. Worksheet to read in 'types_xl_path'
 
     Returns
         Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
@@ -973,11 +971,11 @@ def read_raw_miljogifter_data(xl_path, sheet_name, types_xl_path, types_sheet_na
 
     # Get discharge cols of interest
     cols = [
-        "KONSMENGD5BOF10",
-        "KONSMENGDKOF10",
-        "KONSMENGDSS10",
+        # "KONSMENGD5BOF10",  # Included in 'store anlegg' dataset
+        # "KONSMENGDKOF10",  # Included in 'store anlegg' dataset
         # "KONSMENGDTOTN10",  # Included in 'store anlegg' dataset
         # "KONSMENGDTOTP10",  # Included in 'store anlegg' dataset
+        "KONSMENGDSS10",
         "MILJOGIFTAS2",
         "MILJOGIFTCD2",
         "MILJOGIFTCR2",
@@ -990,17 +988,7 @@ def read_raw_miljogifter_data(xl_path, sheet_name, types_xl_path, types_sheet_na
     df = df[["ANLEGGSNR"] + cols]
     df.dropna(subset=cols, how="all", inplace=True)
     df.columns = ["site_id"] + [f"{col}_kg" for col in cols]
-
-    # Join treatment types
-    typ_df = pd.read_excel(types_xl_path, sheet_name=types_sheet_name)
-    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS"]]
-    typ_df.columns = ["site_id", "treatment_type"]
-    typ_df.dropna(how="all", inplace=True)
-    typ_df["treatment_type"].replace({"?": "Annen rensing"}, inplace=True)
-    df = pd.merge(df, typ_df, how="left", on="site_id")
-    df["treatment_type"].fillna("Annen rensing", inplace=True)
-
-    # df = df.melt(id_vars="site_id").dropna(subset="value")
+    df = df.melt(id_vars="site_id").dropna(subset="value")
 
     return loc_gdf, df
 
@@ -1058,12 +1046,23 @@ def read_raw_industry_data(xl_path, sheet_name):
     loc_gdf.reset_index(drop=True, inplace=True)
 
     # Get discharge cols of interest
-    df = df[["Anleggsnr", "Komp.kode", "Mengde", "Enhet"]]
+    df = df[["Anleggsnr", "Anleggsaktivitet", "Komp.kode", "Mengde", "Enhet"]]
     df["Enhet"].replace({"tonn": "tonnes"}, inplace=True)
     df["variable"] = df["Komp.kode"] + "_" + df["Enhet"]
-    df = df[["Anleggsnr", "variable", "Mengde"]]
-    df.columns = ["site_id", "variable", "value"]
+    df = df[["Anleggsnr", "Anleggsaktivitet", "variable", "Mengde"]]
+    df.columns = ["site_id", "treatment_type", "variable", "value"]
     df.dropna(subset="value", inplace=True)
+    df = df.query("value > 0")
+
+    # Ignore some pars as they overlap with estimates based on TOTN and TOTP
+    # TO DO: Consdier using these value where reported (although no NO3, so may not be accurate)
+    ignore_par_list = ["NH3", "NH4-N", "P-ORTO"]
+    df = df.query("variable not in @ignore_par_list")
+
+    # Convert to wide format
+    df = df.pivot(
+        index=["site_id", "treatment_type"], columns="variable", values="value"
+    ).reset_index()
 
     return loc_gdf, df
 
@@ -1076,7 +1075,7 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
         ├─ avlop_stor_anlegg_{year}_raw.xlsx
         │  ├─ store_anlegg_{year} [worksheet]
         │
-        ├─ avlop_stor_anlegg_{year}_treatment_types.xlsx
+        ├─ avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx
         │  ├─ data [worksheet]
         │
         ├─ avlop_miljogifter_{year}_raw.xlsx
@@ -1087,9 +1086,10 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
 
     This function reads all the raw files and combines site locations and data values
     into a geodataframe and a dataframe, respectively. Subfractions of TOTN and TOTP
-    are estimated, along with SS and TOC. Parameter names are mapped to input parameter
-    IDs in the database, and duplicates are removed. Sites without coordinates are
-    highlighted, and the database is checked to identify new sites to be uploaded.
+    are estimated, TOC is estimated from BOF5 and KOF, and SS is included where
+    reported. Parameter names are mapped to input parameter IDs in the database, and
+    duplicates are removed. Sites without coordinates are highlighted, and the database
+    checked to identify new sites to be uploaded.
 
     Args
         data_fold: Str. Folder containg raw data files, with the file structure as
@@ -1111,7 +1111,7 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
     miljo_path = os.path.join(data_fold, f"avlop_miljogifter_{year}_raw.xlsx")
     ind_path = os.path.join(data_fold, f"industry_{year}_raw.xlsx")
     treat_types_path = os.path.join(
-        data_fold, f"avlop_stor_anlegg_{year}_treatment_types.xlsx"
+        data_fold, f"avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx"
     )
     stan_loc_gdf, stan_df = read_raw_large_wastewater_data(
         stan_path,
@@ -1120,20 +1120,21 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
         "data",
     )
     miljo_loc_gdf, miljo_df = read_raw_miljogifter_data(
-        miljo_path,
-        f"miljogifter_{year}",
-        treat_types_path,
-        "data",
+        miljo_path, f"miljogifter_{year}"
     )
     ind_loc_gdf, ind_df = read_raw_industry_data(ind_path, f"industry_{year}")
 
-    # Subdivide TOTN and TOTP for 'store anlegg'
+    # Estimate TOC from BOF and KOF
+    stan_df = estimate_toc_from_bof_kof(stan_df, "Large wastewater")
+    ind_df = estimate_toc_from_bof_kof(ind_df, "Industry")
+
+    # Subdivide TOTN and TOTP
     stan_df = subdivide_point_source_n_and_p(
         stan_df, "Large wastewater", "TOTN_kg", "TOTP_kg"
     )
-
-    # Estimate TOC from BOF and KOF
-    miljo_df = estimate_toc_from_bof_kof(miljo_df, "Large wastewater")
+    ind_df = subdivide_point_source_n_and_p(
+        ind_df, "Industry", "N-TOT_tonnes", "P-TOT_tonnes"
+    )
 
     # Combine 'values' dfs
     df = pd.concat([stan_df, miljo_df, ind_df], axis="rows")
@@ -1222,7 +1223,6 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
             "locations are not in the database and do not have "
             "co-ordinates (and therefore must be ignored)",
         )
-        # print(not_in_db_gdf)
 
         return not_in_db_gdf, df
 
@@ -1351,7 +1351,13 @@ def subdivide_point_source_n_and_p(df, site_type, totn_col, totp_col):
         else:
             tot_col = totp_col
         unit = tot_col.split("_")[-1]
-        df[f"{frac}_{unit}"] = df[tot_col] * df[f"prop_{frac.lower()}"]
+        if unit == "tonnes":
+            unit_factor = 1000
+        elif unit == "kg":
+            unit_factor = 1
+        else:
+            raise ValueError("Unit not recognised.")
+        df[f"{frac}_kg"] = unit_factor * df[tot_col] * df[f"prop_{frac.lower()}"]
 
     # Delete unnecessary cols
     for col in prop_df.columns:
@@ -1396,8 +1402,8 @@ def estimate_toc_from_bof_kof(df, site_type):
     ), f"'df' contains unknown treatment types: {set(df['treatment_type']) - set(prop_df['treatment_type'])}."
 
     if site_type == "Large wastewater":
-        bof_col = "KONSMENGD5BOF10"
-        kof_col = "KONSMENGDKOF10"
+        bof_col = "BOF5"
+        kof_col = "KOF"
         unit = "kg"
     else:
         bof_col = "BOF5"
@@ -1406,24 +1412,21 @@ def estimate_toc_from_bof_kof(df, site_type):
 
     df = pd.merge(df, prop_df, how="left", on="treatment_type")
 
-    # Estimate TOC. Use BOF if available, otherwise KOF
-    df[f"TOC_BOF_{unit}"] = (df["b1"] * (df[f"{bof_col}_{unit}"] ** df["b2"])) + df[
-        "b3"
-    ]
-    df[f"TOC_KOF_{unit}"] = (df["k1"] * (df[f"{kof_col}_{unit}"] ** df["k2"])) + df[
-        "k3"
-    ]
+    # Estimate TOC. Use KOF if available, otherwise BOF
+    df[f"TOC_BOF_{unit}"] = df["bof_fac"] * df[f"{bof_col}_{unit}"]
+    df[f"TOC_KOF_{unit}"] = df["kof_fac"] * df[f"{kof_col}_{unit}"]
     if f"TOC_{unit}" in df.columns:
-        df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_BOF_{unit}"])
+        df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_KOF_{unit}"])
     else:
-        df[f"TOC_{unit}"] = df[f"TOC_BOF_{unit}"]
-    df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_KOF_{unit}"])
-    del df["TOC_BOF_kg"], df["TOC_KOF_kg"]
+        df[f"TOC_{unit}"] = df[f"TOC_KOF_{unit}"]
+    df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_BOF_{unit}"])
+    del df[f"TOC_BOF_{unit}"], df[f"TOC_KOF_{unit}"]
 
     # Delete unnecessary cols
     for col in prop_df.columns:
-        del df[col]
-
-    df = df.melt(id_vars="site_id").dropna(subset="value")
+        if col == "treatment_type":
+            pass
+        else:
+            del df[col]
 
     return df
