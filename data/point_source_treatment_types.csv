@@ -9,19 +9,19 @@ Large wastewater,Kjemisk-biologisk,0.9,0.1,0.87,0.13,0.32,1.8
 Large wastewater,Kjemisk-biologisk m/N-fjerning,0.76,0.24,0.55,0.45,0.32,1.8
 Large wastewater,Naturbasert,0.91,0.09,0.66,0.34,0.32,1.8
 Large wastewater,Annen rensing,0.76,0.24,0.61,0.39,0.29,1.2
-Small wastewater,Direkte utslipp,0.65,0.35,0.67,0.33,,
-Small wastewater,Slamavskiller,0.68,0.32,0.35,0.65,,
-Small wastewater,Infiltrasjonsanlegg,0.9,0.1,0.87,0.13,,
-Small wastewater,Sandfilteranlegg,0.87,0.13,0.56,0.44,,
-Small wastewater,Biologisk,0.87,0.13,0.56,0.44,,
-Small wastewater,Kjemisk,0.72,0.28,0.87,0.13,,
-Small wastewater,Biologisk og kjemisk,0.9,0.1,0.87,0.13,,
-Small wastewater,Tett tank for svartvann,0.2,0.8,0.35,0.65,,
-Small wastewater,Biologisk toalett,0.2,0.8,0.35,0.65,,
-Small wastewater,Konstruert våtmark,0.9,0.1,0.66,0.34,,
-Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.3,0.7,0.66,0.34,,
-Small wastewater,"Biologisk toalett, gråvannsfilter",0.3,0.7,0.66,0.34,,
-Small wastewater,Annen løsning,0.62,0.38,0.62,0.38,,
+Small wastewater,Direkte utslipp,0.65,0.35,0.67,0.33,0.23,0.6
+Small wastewater,Slamavskiller,0.68,0.32,0.35,0.65,0.23,0.6
+Small wastewater,Infiltrasjonsanlegg,0.9,0.1,0.87,0.13,0.32,1.8
+Small wastewater,Sandfilteranlegg,0.87,0.13,0.56,0.44,0.38,1.8
+Small wastewater,Biologisk,0.87,0.13,0.56,0.44,0.38,1.8
+Small wastewater,Kjemisk,0.72,0.28,0.87,0.13,0.33,0.9
+Small wastewater,Biologisk og kjemisk,0.9,0.1,0.87,0.13,0.32,1.8
+Small wastewater,Tett tank for svartvann,0.2,0.8,0.35,0.65,0.23,0.6
+Small wastewater,Biologisk toalett,0.2,0.8,0.35,0.65,0.23,0.6
+Small wastewater,Konstruert våtmark,0.9,0.1,0.66,0.34,0.32,1.8
+Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.3,0.7,0.66,0.34,0.38,1.8
+Small wastewater,"Biologisk toalett, gråvannsfilter",0.3,0.7,0.66,0.34,0.38,1.8
+Small wastewater,Annen løsning,0.62,0.38,0.62,0.38,0.31,1.3
 Industry,Annen aktivitet,0.0,1.0,0.5,0.5,0.15,0.5
 Industry,Avfallsforbrenning,1.0,0.0,0.5,0.5,0.2,0.5
 Industry,Brannøvingsplass,0.5,0.5,0.5,0.5,0.2,0.5

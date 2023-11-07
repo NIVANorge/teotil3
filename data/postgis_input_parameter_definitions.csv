@@ -111,3 +111,5 @@ in_par_id,oracle_par_id,name,unit,comment
 111,38,Zn,kg,Used by industry dataset
 112,73,Zn,MG,
 113,79,Zn,tonnes,
+114,,BOF5,kg,Used by wastewater datasets
+115,,KOF,kg,Used by wastewater datasets
