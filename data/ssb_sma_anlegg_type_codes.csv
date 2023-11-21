@@ -1,0 +1,15 @@
+ssb_code,ssb_desc,teotil_type
+FASTBOURENS2,Urenset utslipp,Direkte utslipp
+FASTBOSLAM2,Slamavskiller uten etterfiltrering,Slamavskiller
+FASTBOINFILT2,Slamavskiller med infiltrasjon (stedegne masser),Infiltrasjonsanlegg
+FASTBOSAND2,Slamavskiller med sandfilter (tilførte masser),Sandfilteranlegg
+FASTBOBIO2,Minirenseanlegg - biologisk,Biologisk
+FASTBOKJEM2,Minirenseanlegg - kjemisk,Kjemisk
+FASTBOKJEMBIO2,Minirenseanlegg - kjemisk/biologisk,Biologisk og kjemisk
+FASTBOTANKSVART2,"Tett tank for svartvann, urenset gråvann",Tett tank for svartvann
+FASTBOTANK2,Tett tank for svart- og gråvann,Tett tank (for alt avløpsvann)
+FASTBOBIOLTOALETT2,"Biodo, forbrenningsdo, utedo m.m., urenset gråvann",Biologisk toalett
+FASTBOVATMARK2,Slamavskiller med konstruert våtmark/filterbed,Konstruert våtmark
+FASTBOTANKFILTER2,"Tett tank for svartvann, gråvannsfilter","Tett tank for svartvann, gråvannsfilter"
+FASTBOBIOLTOALETTFILTER2,"Biodo, forbrenningsdo, utedo m.m., gråvannsfilter","Biologisk toalett, gråvannsfilter"
+FASTBOANNEN2,Annen løsning,Annen løsning

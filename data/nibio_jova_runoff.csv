@@ -1,0 +1,10 @@
+station_code,station_name,utm_north,utm_east,utm_zone,nibio_runoff_mm
+hot,Hotranelva,7062146,607425,32,707
+nau,Naurstadbekken,7473876,751195,32,1082
+vol,Volbubekken,6776162,503141,32,288
+tim,Timebekken,6514206,308669,32,912
+ska,Skas-Heigre,6527035,303696,32,687
+kol,Kolstadbekken,6750840,598961,32,366
+mør,Mørdrebekken,6667561,633103,32,318
+sku,Skuterudbekken,6616575,603054,32,552
+vas,Vasshaglona,6466701,468651,32,1039
