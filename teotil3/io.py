@@ -261,22 +261,20 @@ def assign_regine_hierarchy(
     return df
 
 
-def get_regine_geodataframe(engine, year, regine_year=2022):
+def get_regine_geodataframe(engine, year):
     """Get the regine catchment polygons and basic attributes from PostGIS as a geodataframe.
 
     Args
         engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3'
                      database
         year:        Int. Year of interest
-        regine_year: Int. Year when regine dataset was downloaded
 
     Returns
         Geodataframe.
     """
-    assert isinstance(regine_year, int), "'regine_year' must be an integer."
     assert isinstance(year, int), "'year' must be an integer."
 
-    sql = text(f"SELECT * FROM teotil3.regine_{regine_year} ORDER BY regine")
+    sql = text("SELECT * FROM teotil3.regines ORDER BY regine")
     gdf = gpd.read_postgis(sql, engine)
 
     # Get the year to use for administrative boundaries. Data are poor before 2014
@@ -367,9 +365,6 @@ def rescale_annual_flows(reg_gdf, data_supply_year, year, engine):
     mean values for the period from 1991 to 2020 from NVE. It must also include a column
     named 'vassom' defining the vassdragsområder.
 
-    'q_fac_df' should contain the annual flow factors in each vassdragsområde returned by
-    'get_annual_vassdrag_flow_factors'.
-
     Args
         reg_gdf:          Geodataframe. Regine catchments with long-term mean flow values
         data_supply_year: Int. Year of data delivery from NVE. NVE supplies complete data
@@ -400,21 +395,17 @@ def rescale_annual_flows(reg_gdf, data_supply_year, year, engine):
     return reg_gdf
 
 
-def get_retention_transmission_factors(engine, year, keep="trans", regine_year=2022):
+def get_retention_transmission_factors(year, keep="trans"):
     """Read regine-level retention and transmission coefficients.
 
     Args
-        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3'
-                     database
         year:        Int. Year of interest
         keep:        Str. Default 'trans'. One of ['trans', 'ret', 'both']. Whether to
                      return only transmission factors, only retention factors, or both
-        regine_year: Int. Year defining regine dataset on which coefficients are based
 
     Returns
         Dataframe.
     """
-    assert isinstance(regine_year, int), "'regine_year' must be an integer."
     assert isinstance(year, int), "'year' must be an integer."
     assert keep in [
         "trans",
@@ -422,10 +413,8 @@ def get_retention_transmission_factors(engine, year, keep="trans", regine_year=2
         "both",
     ], "'keep' must be one of ['trans', 'ret', 'both']."
 
-    sql = text(
-        f"SELECT * FROM teotil3.regine_retention_transmission_10m_dem_{regine_year}"
-    )
-    df = pd.read_sql(sql, engine)
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/regine_retention_transmission_10m_dem.csv"
+    df = pd.read_csv(url)
 
     if keep == "trans":
         cols = ["regine"] + [col for col in df.columns if col.startswith("trans_")]
@@ -439,38 +428,31 @@ def get_retention_transmission_factors(engine, year, keep="trans", regine_year=2
     return df
 
 
-def get_background_coefficients(engine, year, regine_year=2022):
+def get_background_coefficients(year):
     """Read the static, spatially variable and spatio-temporally variable background
     coefficents and join to a single dataframe.
 
     Args
-        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3'
-                     database
         year:        Int. Year of interest
-        regine_year: Int. Year defining regine dataset on which coefficients are based
 
     Returns
         Dataframe.
     """
-    assert isinstance(regine_year, int), "'regine_year' must be an integer."
     assert isinstance(year, int), "'year' must be an integer."
 
     # Read background coefficients
-    sql = text(
-        f"SELECT * FROM teotil3.spatially_static_background_coefficients_{regine_year}"
-    )
-    static_df = pd.read_sql(sql, engine)
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/spatially_static_background_coefficients.csv"
+    static_df = pd.read_csv(url)
 
-    sql = text(
-        f"SELECT * FROM teotil3.spatially_variable_background_coefficients_{regine_year}"
-    )
-    spatial_df = pd.read_sql(sql, engine)
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/spatially_variable_background_coefficients.csv"
+    spatial_df = pd.read_csv(url)
 
-    sql = text(
-        f'SELECT regine, "{year}_lake_din_kg/km2" AS "lake_din_kg/km2" '
-        f"FROM teotil3.spatiotemporally_variable_background_coefficients_{regine_year}"
+    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/spatiotemporally_variable_background_coefficients.csv"
+    spat_temp_df = pd.read_csv(url)
+    spat_temp_df.rename(
+        {f"{year}_lake_din_kg/km2": "lake_din_kg/km2"}, axis="columns", inplace=True
     )
-    spat_temp_df = pd.read_sql(sql, engine)
+    spat_temp_df = spat_temp_df[["regine", "lake_din_kg/km2"]]
 
     # Join
     df = pd.merge(spatial_df, spat_temp_df, on="regine", how="inner")
@@ -564,7 +546,6 @@ def make_input_file(
     nve_data_year,
     engine,
     out_csv_fold=None,
-    regine_year=2022,
     nan_to_vass=True,
     add_offshore=True,
     order_coastal=False,
@@ -580,7 +561,6 @@ def make_input_file(
                        database
         out_csv_fold:  None or Str. Default None. Path to folder where output CSV will be
                        created
-        regine_year:   Int. Year defining regine dataset on which coefficients are based
         nan_to_vass:   Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
                        to determine hydrological connectivity
         add_offshore:  Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
@@ -594,15 +574,13 @@ def make_input_file(
         Dataframe. The CSV is written to the specified folder.
     """
     # Get basic datasets from database
-    reg_gdf = get_regine_geodataframe(engine, year, regine_year=regine_year)
-    ret_df = get_retention_transmission_factors(
-        engine, year, keep="trans", regine_year=regine_year
-    )
-    back_df = get_background_coefficients(engine, year, regine_year=regine_year)
+    reg_gdf = get_regine_geodataframe(engine, year)
+    ret_df = get_retention_transmission_factors(year, keep="trans")
+    back_df = get_background_coefficients(year)
     spr_df = get_annual_spredt_data(engine, year)
     aqu_df = get_annual_point_data(engine, year, "aquaculture")
     ind_df = get_annual_point_data(engine, year, "industry")
-    ww_df = get_annual_point_data(engine, year, "wastewater")
+    ww_df = get_annual_point_data(engine, year, "large wastewater")
 
     # Rescale long-term flow averages to year of interest
     reg_gdf = rescale_annual_flows(reg_gdf, nve_data_year, year, engine)
@@ -657,9 +635,7 @@ def make_input_file(
         ]
         cols = [col for col in reg_gdf.columns if col not in cols_to_ignore]
         reg_df = reg_gdf[cols]
-        csv_name = (
-            f"teotil3_input_data_{year}_nve{nve_data_year}_regine{regine_year}.csv"
-        )
+        csv_name = f"teotil3_input_data_nve{nve_data_year}_{year}.csv"
         csv_path = os.path.join(out_csv_fold, csv_name)
         reg_df.to_csv(csv_path, index=False)
 
@@ -676,6 +652,7 @@ def get_annual_spredt_data(
         "totp_kg",
         "tdp_kg",
         "tpp_kg",
+        "toc_kg",
     ],
 ):
     """Get annual 'spredt' data for each kommune. 'spredt' comprises wastewater treatment discharges
@@ -683,8 +660,8 @@ def get_annual_spredt_data(
     sites that are too small (< 50 p.e.) to be reported individually.
 
     Args
-        year:     Int. Year of interest
         engine:   SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        year:     Int. Year of interest
         par_list: List of parameters to consider. If None, returns data for all parameters
                   in the database. The default is the basic set of parameters considered
                   by TEOTIL3.
@@ -734,7 +711,7 @@ def get_annual_spredt_data(
 def get_annual_point_data(
     engine,
     year,
-    source_type,
+    sector,
     par_list=[
         "totn_kg",
         "din_kg",
@@ -749,22 +726,24 @@ def get_annual_point_data(
     """Get annual data for aquaculture, industry or wasterwater treatment from the database.
 
     Args
-        year:        Int. Year of interest
-        source_type: Str. One of ['aquaculture', 'industry', 'wastewater']
-        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3' database
-        par_list:    List of parameters to consider. If None, returns data for all parameters
-                     in the database. The default is the basic set of parameters considered
-                     by TEOTIL3.
+        year:     Int. Year of interest
+        sector:   Str. One of ['aquaculture', 'industry', 'large wastewater',
+                  'small wastewater']
+        engine:   SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        par_list: List of parameters to consider. If None, returns data for all parameters
+                  in the database. The default is the basic set of parameters considered
+                  by TEOTIL3.
 
     Returns
-        Dataframe of aquaculture data
+        Dataframe of point data assigned to regines.
     """
-    source_type = source_type.lower()
-    assert source_type in [
+    sector = sector.lower()
+    assert sector in [
         "aquaculture",
         "industry",
-        "wastewater",
-    ], "'source_type' must be one of ['aquaculture', 'industry', 'wastewater']."
+        "large wastewater",
+        "small wastewater",
+    ], "'sector' must be one of ['aquaculture', 'industry', 'large wastewater', 'small wastewater']."
 
     sql = text(
         """
@@ -775,41 +754,41 @@ def get_annual_point_data(
             teotil3.input_output_param_conversion b,
             teotil3.output_param_definitions c,
             (SELECT a.site_id,
-                a.type,
+                a.sector,
+                a.year,
                 b.regine
             FROM teotil3.point_source_locations a,
-                teotil3.regine_2022 b
+                teotil3.regines b
             WHERE ST_WITHIN(a.geom, b.geom)
             ) d
         WHERE a.in_par_id = b.in_par_id
             AND b.out_par_id = c.out_par_id
             AND a.site_id = d.site_id
             AND a.year = :year
-            AND d.type = :source_type
+            AND d.year = :year
+            AND d.sector = :sector
         GROUP BY d.regine,
             c.name,
             c.unit
     """
     )
-    df = pd.read_sql(
-        sql, engine, params={"year": year, "source_type": source_type.capitalize()}
-    )
+    df = pd.read_sql(sql, engine, params={"year": year, "sector": sector.capitalize()})
 
     if len(df) == 0:
-        print(f"    No {source_type} data for {year}.")
+        print(f"    No {sector} data for {year}.")
 
         return None
 
     else:
         df = df.pivot(index="regine", columns="name", values="value").copy()
-        cols = [f"{source_type}_{col.lower()}" for col in df.columns]
+        cols = [f"{sector.replace(' ', '-')}_{col.lower()}" for col in df.columns]
         df.columns = cols
         df.columns.name = ""
         if par_list:
             cols = [
-                f"{source_type}_{col}"
+                f"{sector.replace(' ', '-')}_{col}"
                 for col in par_list
-                if f"{source_type}_{col}" in df.columns
+                if f"{sector.replace(' ', '-')}_{col}" in df.columns
             ]
             df = df[cols].round(1)
         df.reset_index(inplace=True)
@@ -827,6 +806,7 @@ def assign_spredt_to_regines(
         "totp_kg",
         "tdp_kg",
         "tpp_kg",
+        "toc_kg",
     ],
 ):
     """Kommune level totals for spredt in 'spr_df' area are assigned to regines in 'reg_gdf'.

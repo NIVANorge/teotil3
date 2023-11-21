@@ -30,7 +30,7 @@ def read_raw_regine_data(geodatabase_path, layer_name):
     )
 
     # Remove Svalbard
-    reg_gdf["vassom"] = reg_gdf["regine"].str.split(".", 1).str[0].astype(int)
+    reg_gdf["vassom"] = reg_gdf["regine"].str.split(".", n=1).str[0].astype(int)
     reg_gdf = reg_gdf.query("vassom < 400").copy()
     reg_gdf["vassom"] = reg_gdf["vassom"].apply(lambda x: f"{x:03}")
 
@@ -225,7 +225,7 @@ def calculate_ar50_land_cover_proportions(
     int_gdf["area_km2"] = int_gdf["geometry"].area / 1e6
 
     print("Aggregating...")
-    lc_df = int_gdf.groupby(["regine", "teotil"]).sum()["area_km2"]
+    lc_df = int_gdf.groupby(["regine", "teotil"]).sum(numeric_only=True)["area_km2"]
     lc_df = lc_df.unstack("teotil")
     lc_df.columns = [f"a_{i}_km2" for i in lc_df.columns]
     lc_df.reset_index(inplace=True)
@@ -297,7 +297,9 @@ def calculate_nve_regine_lake_areas(reg_gdf, lake_gdf):
         reg_gdf_cea, lake_gdf_cea, how="intersection", keep_geom_type=True
     )
     int_gdf["a_lake_nve_km2"] = int_gdf["geometry"].area / 1e6
-    int_gdf = int_gdf.groupby("regine")["a_lake_nve_km2"].sum().reset_index()
+    int_gdf = (
+        int_gdf.groupby("regine")["a_lake_nve_km2"].sum(numeric_only=True).reset_index()
+    )
     reg_gdf = pd.merge(reg_gdf, int_gdf, on="regine", how="left")
     reg_gdf["a_lake_nve_km2"].fillna(0, inplace=True)
 
@@ -310,39 +312,94 @@ def calculate_nve_regine_lake_areas(reg_gdf, lake_gdf):
     return reg_gdf
 
 
-def calculate_lake_retention_vollenweider(df, res_time_col, par_name, sigma, n):
-    """Calculate retention and transmission factors for individual lakes
-    according to Vollenweider (1975).
+def transmission_sigma_constant(tau, sigma):
+    """Estimate lake transmission from water residence time using a "basic"
+    Vollenweider model:
 
-        R = sigma / (sigma + rho^n)
-
-    where rho is the reciprocal of the residence time (in years), and
-    sigma and n are parameter-specific constants. See
-
-    https://niva.brage.unit.no/niva-xmlui/bitstream/handle/11250/2985726/7726-2022%2bhigh.pdf?sequence=1&isAllowed=y#page=23
-
-    for details.
+        T = 1 / (1 + sigma * tau)
 
     Args
-        df:           Obj. Dataframe of lake data
-        res_time_col: Str. Column name in 'df' containing water residence
-                      times (in years)
-        par_name:     Str. Name for parameter
-        sigma:        Int or Float. Parameter-specific constant. Must be
-                      positive
-        n:            Int or Float. Parameter-specific exponent. Must be
-                      positive
+        tau:   Array-like. Lake water residence times in years
+        sigma: Float. First-order rate constant for removal processes (units
+               per year)
+
+    Returns
+        Array of transmission factors.
+    """
+    return 1 / (1 + (sigma * tau))
+
+
+def transmission_sigma_from_tau(tau, k, p):
+    """Estimate lake transmission from water residence time using a model
+    where sigma is a function of tau.
+
+        T = 1 / (1 + k * tau ** p)
+
+    Args
+        tau: Array-like. Lake water residence times in years
+        k:   Float. Model parameter
+        p:   Float. Model parameter
+
+    Returns
+        Array of transmission factors.
+    """
+    return 1 / (1 + (k * (tau**p)))
+
+
+def transmission_sigma_from_depth(H, s):
+    """Estimate lake transmission from water residence time using a model
+    where sigma is a function of mean lake depth.
+
+        T = 1 / (1 + (s / H))
+
+    Args
+        H: Array-like. Lake hydraulic load (m/year)
+        s: Float. Apparent settling velocity (m/year)
+
+    Returns
+        Array of transmission factors.
+    """
+    return 1 / (1 + (s / H))
+
+
+def calculate_lake_retention_vollenweider(df, par_name, params):
+    """Calculate retention and transmission factors for individual lakes
+    according to various Vollenweider-like models.
+
+    Args
+        df:       Dataframe of lake data
+        par_name: Str. Name for parameter
+        params:   Dict. Must contains the following keys:
+                      ind_var_col: Str. Column name in 'df' containing the
+                                   independent variable (e.g. 'tau' or 'H')
+                      model        Str. One of [
+                                       'sigma_constant',
+                                       'sigma_from_tau',
+                                       'sigma_from_depth',
+                                       ]
+                      <other>      Passed as kwargs to the relevant 'model'
+                                   function.
 
     Returns
         Dataframe. 'df' is returned with two new columns added: 'trans_par'
         and 'ret_par', where 'par' is the 'par_name' provided.
     """
-    assert res_time_col in df.columns, "'res_time_col' not found in 'df'."
-    assert sigma > 0, "'sigma' must be positive."
-    assert n > 0, "'n' must be positive."
+    ind_var_col = params.pop("ind_var_col")
+    model = params.pop("model")
 
-    df[f"ret_{par_name}"] = sigma / (sigma + ((1 / df[res_time_col]) ** n))
-    df[f"trans_{par_name}"] = 1 - df[f"ret_{par_name}"]
+    models = ["sigma_constant", "sigma_from_tau", "sigma_from_depth"]
+    assert model in models, f"'model' must be one of @models."
+    assert ind_var_col in df.columns, f"'{ind_var_col}' not found in 'df'."
+
+    if model == "sigma_constant":
+        trans = transmission_sigma_constant(df[ind_var_col], **params)
+    elif model == "sigma_from_tau":
+        trans = transmission_sigma_from_tau(df[ind_var_col], **params)
+    else:
+        trans = transmission_sigma_from_depth(df[ind_var_col], **params)
+
+    df[f"trans_{par_name}"] = trans
+    df[f"ret_{par_name}"] = 1 - trans
 
     return df
 
@@ -396,31 +453,39 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     res_csv = f"../../data/lake_residence_times_{dtm_res}m_dem.csv"
     df = pd.read_csv(res_csv)
 
-    # Vollenweider parameters for individual lakes.
-    # The parameters sigma and n are those matching the following (equivalent) equations
-    #     R = sigma / (sigma + rho^n) where rho = 1/tau
-    #     T = 1 / (1 + sigma * tau^n)
-    # par_name: (sigma, n)
+    # Vollenweider parameters for individual lakes
     voll_dict = {
-        "totp": (1, 0.5),
-        "tdp": (0.5, 0.5),
-        "tpp": (2, 0.5),
-        "totn": (0.75, 0.4),
-        "din": (1, 1),
-        "ton": (0.2, 1),
-        "ss": (90, 1),
-        "toc": (0.6, 0.4),
+        "totp": {
+            "ind_var_col": "res_time_yr",
+            "model": "sigma_from_tau",
+            "k": 1,
+            "p": 0.5,
+        },
+        "tdp": {
+            "ind_var_col": "res_time_yr",
+            "model": "sigma_from_tau",
+            "k": 0.5,
+            "p": 0.5,
+        },
+        "tpp": {
+            "ind_var_col": "res_time_yr",
+            "model": "sigma_from_tau",
+            "k": 2,
+            "p": 0.5,
+        },
+        "totn": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 4.5},
+        "din": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 6.0},
+        "ton": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 1.4},
+        "ss": {"ind_var_col": "res_time_yr", "model": "sigma_constant", "sigma": 90},
+        "toc": {
+            "ind_var_col": "res_time_yr",
+            "model": "sigma_from_tau",
+            "k": 0.6,
+            "p": 0.4,
+        },
     }
-    for par in voll_dict.keys():
-        sigma, n = voll_dict[par]
-        df = calculate_lake_retention_vollenweider(
-            df, "res_time_yr", par, sigma=sigma, n=n
-        )
-
-    # Non-Vollenweider params for individual lakes
-    # Original ret_n assumed to be 0.2*ret_totp
-    # df["ret_orig-totn"] = 0.2 * df["ret_totp"]
-    # df["trans_orig-totn"] = 1 - df["ret_orig-totn"]
+    for par, params in voll_dict.items():
+        df = calculate_lake_retention_vollenweider(df, par, params)
 
     # Aggregate to regine level
     pars = [col[6:] for col in df.columns if col.startswith("trans_")]
@@ -439,85 +504,68 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     return reg_gdf
 
 
-def read_raw_aquaculture_data(xl_path, sheet_name, year, eng):
-    """Read the raw aquaculture data from Fiskeridirektoratet. Identifies sites missing
-    co-ordinates and those not already in the database. Returns a dataframe of new site
-    locations to add to the database, plus a dataframe of raw monthly data for further
-    processing.
+def read_raw_aquaculture_data(xl_path, sheet_name, year):
+    """Read the raw aquaculture data from Fiskeridirektoratet. Returns a dataframe of
+    site locations, plus a dataframe of raw monthly data for further processing.
 
     Args
         xl_path:    Str. Path to Excel file from Fiskeridirektoratet
         sheet_name: Str. Worksheet to read
         year:       Int. Year being processed
-        eng:        Obj. Active database connection object connected to PostGIS
 
     Returns
-        Tuple of (geo)dataframes (new_locs_gdf, data_df).
+        Tuple of (geo)dataframes (loc_gdf, data_df).
     """
     assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
     assert isinstance(sheet_name, str), "'sheet_name' must be a string."
     assert isinstance(year, int), "'year' must be an integer."
 
-    # Relevant cols in raw data
-    cols_dict = {
-        "AAR": "year",
-        "LOKNR": "site_id",
-        "LOKNAVN": "name",
-        "N_DESIMALGRADER_Y": "lat",
-        "O_DESIMALGRADER_X": "lon",
-    }
-
     # Read raw file
     df = pd.read_excel(xl_path, sheet_name=sheet_name)
     df.dropna(how="all", inplace=True)
     df.rename(
-        cols_dict,
+        {
+            "AAR": "year",
+            "LOKNR": "site_id",
+            "LOKNAVN": "name",
+            "N_DESIMALGRADER_Y": "lat",
+            "O_DESIMALGRADER_X": "lon",
+        },
         axis="columns",
         inplace=True,
     )
     df = df.query("year == @year")
     df["site_id"] = df["site_id"].astype(str)
-    # df = df[cols_dict.values()]
+    df["sector"] = "Aquaculture"
+    df["type"] = "Fiskeoppdrett i sjøvann"
 
     # Check for missing co-ords
     no_coords_df = df.query("(lat != lat) or (lon != lon)")[
         ["site_id", "name"]
     ].sort_values("site_id")
-    print(
-        f"{len(no_coords_df)} locations do not have co-ordinates in this year's data."
-    )
-
-    # Check for sites not already in db
-    sql = text(
-        """SELECT DISTINCT(site_id) FROM teotil3.point_source_locations
-           WHERE type = 'Aquaculture'
-        """
-    )
-    in_db_df = pd.read_sql_query(sql, eng)
-    not_in_db = set(df["site_id"].values) - set(in_db_df["site_id"].values)
-    not_in_db_df = df[df["site_id"].isin(list(not_in_db))][
-        ["site_id", "name", "lat", "lon"]
-    ].drop_duplicates(subset=["site_id"])
-    print(f"{len(not_in_db_df)} locations are not in the database.")
-    if len(not_in_db_df) > 0:
-        # Format df to match db
-        not_in_db_df.dropna(subset=["lat", "lon"], how="any", inplace=True)
-        not_in_db_gdf = gpd.GeoDataFrame(
-            not_in_db_df,
-            geometry=gpd.points_from_xy(
-                not_in_db_df["lon"], not_in_db_df["lat"], crs="epsg:4326"
-            ),
+    if len(no_coords_df) > 0:
+        print(
+            f"{len(no_coords_df)} locations do not have co-ordinates in this year's data."
         )
-        not_in_db_gdf = not_in_db_gdf.to_crs("epsg:25833")
-        not_in_db_gdf["type"] = "Aquaculture"
-        not_in_db_gdf = not_in_db_gdf[["site_id", "name", "type", "geometry"]]
-        not_in_db_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-        not_in_db_gdf.set_geometry("geom", inplace=True)
-        not_in_db_gdf.reset_index(drop=True, inplace=True)
+        print(no_coords_df)
 
-        return not_in_db_gdf, df
+    df.dropna(subset=["lat", "lon"], how="any", inplace=True)
 
-    return None, df
+    # Build geodataframe of locations
+    loc_gdf = gpd.GeoDataFrame(
+        df, geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326")
+    )
+    loc_gdf = loc_gdf.to_crs("epsg:25833")
+    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    loc_gdf.set_geometry("geom", inplace=True)
+    loc_gdf.reset_index(drop=True, inplace=True)
+
+    # The name sometimes changes even if the site is identical
+    loc_gdf = loc_gdf[
+        ["site_id", "name", "sector", "type", "year", "geom"]
+    ].drop_duplicates(subset=["site_id", "sector", "type", "year", "geom"])
+
+    return loc_gdf, df
 
 
 def estimate_aquaculture_nutrient_inputs(
@@ -583,8 +631,8 @@ def estimate_aquaculture_nutrient_inputs(
     ) + df["UTTAK_KILO"]
 
     # Aggregate by month, location and species
-    agg_df = df.groupby(by=["site_id", "MAANED", "FISKEARTID"])
-    sum_df = agg_df.sum()[["FORFORBRUK_KILO", "biomass_kg"]]
+    agg_df = df.groupby(by=["site_id", "sector", "type", "MAANED", "FISKEARTID"])
+    sum_df = agg_df.sum(numeric_only=True)[["FORFORBRUK_KILO", "biomass_kg"]]
 
     # Get biomass for previous month
     sum_df["biomass_prev_kg"] = sum_df.apply(
@@ -618,8 +666,8 @@ def estimate_aquaculture_nutrient_inputs(
     sum_df = sum_df.query("FISKEARTID in @species_ids")
 
     # Aggregate by location
-    agg_df = sum_df.groupby(by=["site_id"])
-    sum_df = agg_df.sum()[["TOTN_kg", "TOTP_kg", "TOC_kg"]]
+    agg_df = sum_df.groupby(by=["site_id", "sector", "type"])
+    sum_df = agg_df.sum(numeric_only=True)[["TOTN_kg", "TOTP_kg", "TOC_kg"]]
 
     # Distribute Cu according to P production
     if cu_tonnes:
@@ -633,8 +681,9 @@ def estimate_aquaculture_nutrient_inputs(
 
     # Subdivide TOTN and TOTP
     sum_df.reset_index(inplace=True)
-    sum_df["treatment_type"] = "None"
     sum_df = subdivide_point_source_n_and_p(sum_df, "Aquaculture", "TOTN_kg", "TOTP_kg")
+    id_cols = ["site_id", "sector", "type"]
+    sum_df = sum_df.melt(id_vars=id_cols)
 
     # Convert to db par_ids
     sql = text(
@@ -665,9 +714,7 @@ def get_aquaculture_biomass_previous_month(row, df):
         Float. Biomass for previous month in kg.
     """
     # Get row props from multi-index
-    loc = row.name[0]
-    mon = row.name[1]
-    spec = row.name[2]
+    loc, sec, typ, mon, spec = row.name
 
     if mon == 1:
         return 0
@@ -843,138 +890,151 @@ def utm_to_wgs84_dd(utm_df, zone="utm_zone", east="utm_east", north="utm_north")
     return df
 
 
-def read_raw_large_wastewater_data(
-    data_xl_path, data_sheet_name, types_xl_path, types_sheet_name
-):
-    """Reads the raw, gap-filled data for TOTN and TOTP from "large" (>50 p.e.) wastewater
-    treatment sites provided by SSB. Note that this dataset includes some data that is
-    duplicated in the "miljøgifter" dataset.
+def read_raw_large_wastewater_data(data_fold, year, eng):
+    """Reads the raw, gap-filled data for TOTN, TOTP, BOF5 and KOF from "large" (>50 p.e.)
+    wastewater treatment sites provided by SSB. Note that this dataset includes some data
+    that is duplicated in the "miljøgifter" dataset.
 
     Args
-        data_xl_path:     Str. Path to Excel "store anlegg" file from SSB
-        data_sheet_name:  Str. Worksheet to read in 'data_xl_path'
-        types_xl_path:    Str. Path to Excel file with treatment types. Usually delivered in
-                          a file named 'RID_Totalpopulasjon_{year}.csv', which should be
-                          checked and converted to Excel
-        types_sheet_name: Str. Worksheet to read in 'types_xl_path'
+        data_fold: Str. Folder containg raw data files, with the file structure as
+                   described above
+        year:      Int. Year being processed
+        eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
-        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
-        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
-        site.
+        Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
     """
-    assert isinstance(data_xl_path, str), "'data_xl_path' must be a valid file path."
-    assert isinstance(data_sheet_name, str), "'data_sheet_name' must be a string."
-    assert isinstance(types_xl_path, str), "'data_xl_path' must be a valid file path."
-    assert isinstance(types_sheet_name, str), "'data_sheet_name' must be a string."
+    assert isinstance(data_fold, str), "'data_fold' must be a valid file path."
+    assert isinstance(year, int), "'year' must be an integer."
 
-    df = pd.read_excel(data_xl_path, sheet_name=data_sheet_name)
+    # Read site locs and data for TOTN and TOTP
+    stan_path = os.path.join(data_fold, f"avlop_stor_anlegg_{year}_raw.xlsx")
+    df = pd.read_excel(
+        stan_path,
+        sheet_name=f"store_anlegg_{year}",
+    )
     df.dropna(how="all", inplace=True)
-    df["type"] = "Wastewater"
-
-    # Get location info
-    loc_gdf = df[["ANLEGGSNR", "ANLEGGSNAVN", "type", "Sone", "UTM_E", "UTM_N"]].copy()
-    loc_gdf.columns = [
-        "site_id",
-        "name",
-        "type",
-        "zone",
-        "east",
-        "north",
-    ]
-    loc_gdf.drop_duplicates(inplace=True)
+    df["sector"] = "Large wastewater"
+    df["year"] = year
+    df.rename(
+        {
+            "ANLEGGSNR": "site_id",
+            "ANLEGGSNAVN": "name",
+            "Sone": "zone",
+            "UTM_E": "east",
+            "UTM_N": "north",
+            "MENGDE_P_UT_kg": "TOTP_kg",
+            "MENGDE_N_UT_kg": "TOTN_kg",
+        },
+        axis="columns",
+        inplace=True,
+    )
+    df.drop_duplicates(
+        subset=["site_id", "name", "zone", "east", "north"], inplace=True
+    )
 
     # Convert UTM Zone to Pandas' nullable integer data type
     # (because proj. complains about float UTM zones)
-    loc_gdf["zone"] = loc_gdf["zone"].astype(pd.Int64Dtype())
+    df["zone"] = df["zone"].astype(pd.Int64Dtype())
 
     # Convert mixed UTM => lat/lon => EPSG 25833
-    loc_gdf = utm_to_wgs84_dd(loc_gdf, "zone", "east", "north")
-    loc_gdf = gpd.GeoDataFrame(
-        loc_gdf,
-        geometry=gpd.points_from_xy(loc_gdf["lon"], loc_gdf["lat"], crs="epsg:4326"),
+    df = utm_to_wgs84_dd(df, "zone", "east", "north")
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
     )
-    loc_gdf = loc_gdf.to_crs("epsg:25833")
-    loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
-    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    loc_gdf.set_geometry("geom", inplace=True)
-    loc_gdf.reset_index(drop=True, inplace=True)
-
-    # Get cols of interest
-    df = df[["ANLEGGSNR", "MENGDE_P_UT_kg", "MENGDE_N_UT_kg"]]
-    df.columns = ["site_id", "TOTP_kg", "TOTN_kg"]
+    gdf = gdf.to_crs("epsg:25833")
+    gdf.drop(["lon", "lat", "zone", "east", "north"], axis="columns", inplace=True)
+    gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    gdf.set_geometry("geom", inplace=True)
 
     # Join treatment types, BOF5 and KOF
-    typ_df = pd.read_excel(types_xl_path, sheet_name=types_sheet_name)
+    types_path = os.path.join(
+        data_fold, f"avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx"
+    )
+    typ_df = pd.read_excel(types_path, sheet_name="data")
     typ_df = typ_df[["ANLEGGSNR", "RENSPRINS", "utslipp_BOF5", "utslipp_KOF"]]
-    typ_df.columns = ["site_id", "treatment_type", "BOF5_kg", "KOF_kg"]
+    typ_df.columns = ["site_id", "type", "BOF5_kg", "KOF_kg"]
     typ_df.dropna(how="all", inplace=True)
-    typ_df["treatment_type"].replace({"?": "Annen rensing"}, inplace=True)
-    df = pd.merge(df, typ_df, how="left", on="site_id")
-    df["treatment_type"].fillna("Annen rensing", inplace=True)
-    df["BOF5_kg"].fillna(0, inplace=True)
-    df["KOF_kg"].fillna(0, inplace=True)
+    typ_df["type"].replace({"?": "Annen rensing"}, inplace=True)
+    gdf = gdf.merge(typ_df, how="left", on="site_id")
+    gdf["type"].fillna("Annen rensing", inplace=True)
+    gdf["BOF5_kg"].fillna(0, inplace=True)
+    gdf["KOF_kg"].fillna(0, inplace=True)
+    gdf.reset_index(drop=True, inplace=True)
+    id_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    val_cols = ["TOTP_kg", "TOTN_kg", "BOF5_kg", "KOF_kg"]
+    gdf = gdf[id_cols + val_cols]
 
-    return loc_gdf, df
+    return gdf
 
 
-def read_raw_miljogifter_data(xl_path, sheet_name):
+def read_raw_miljogifter_data(data_fold, year, eng):
     """Reads the raw, not-gap-filled data for "large" (>50 p.e.) wastewater treatment
-    sites. Provided by SSB. Note that the 'miljøgifter' dataset includes some data
+    sites provided by SSB. Note that the 'miljøgifter' dataset includes some data
     that is duplicated in the "store anlegg" dataset.
 
     Args
-        data_xl_path:     Str. Path to Excel "store anlegg" file from SSB
-        data_sheet_name:  Str. Worksheet to read in 'data_xl_path'
+        data_fold: Str. Folder containg raw data files, with the file structure as
+                   described above
+        year:      Int. Year being processed
+        eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
-        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
-        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
-        site.
+        Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
     """
-    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
-    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+    assert isinstance(data_fold, str), "'data_fold' must be a valid file path."
+    assert isinstance(year, int), "'year' must be an integer."
 
-    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    miljo_path = os.path.join(data_fold, f"avlop_miljogifter_{year}_raw.xlsx")
+    df = pd.read_excel(miljo_path, sheet_name=f"miljogifter_{year}")
     df.dropna(how="all", inplace=True)
-    df["type"] = "Wastewater"
-
-    # Get location info
-    loc_gdf = df[
-        ["ANLEGGSNR", "ANLEGGSNAVN", "type", "SONEBELTE", "UTMOST", "UTMNORD"]
-    ].copy()
-    loc_gdf.columns = [
-        "site_id",
-        "name",
-        "type",
-        "zone",
-        "east",
-        "north",
-    ]
-    loc_gdf.drop_duplicates(inplace=True)
+    df["sector"] = "Large wastewater"
+    df["year"] = year
+    df.rename(
+        {
+            "ANLEGGSNR": "site_id",
+            "ANLEGGSNAVN": "name",
+            "SONEBELTE": "zone",
+            "UTMOST": "east",
+            "UTMNORD": "north",
+        },
+        axis="columns",
+        inplace=True,
+    )
+    df.drop_duplicates(
+        subset=["site_id", "name", "zone", "east", "north"], inplace=True
+    )
 
     # Convert UTM Zone to Pandas' nullable integer data type
     # (because proj. complains about float UTM zones)
-    loc_gdf["zone"] = loc_gdf["zone"].astype(pd.Int64Dtype())
+    df["zone"] = df["zone"].astype(pd.Int64Dtype())
 
     # Convert mixed UTM => lat/lon => EPSG 25833
-    loc_gdf = utm_to_wgs84_dd(loc_gdf, "zone", "east", "north")
-    loc_gdf = gpd.GeoDataFrame(
-        loc_gdf,
-        geometry=gpd.points_from_xy(loc_gdf["lon"], loc_gdf["lat"], crs="epsg:4326"),
+    df = utm_to_wgs84_dd(df, "zone", "east", "north")
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
     )
-    loc_gdf = loc_gdf.to_crs("epsg:25833")
-    loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
-    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    loc_gdf.set_geometry("geom", inplace=True)
-    loc_gdf.reset_index(drop=True, inplace=True)
+    gdf = gdf.to_crs("epsg:25833")
+    gdf.drop(["lon", "lat", "zone", "east", "north"], axis="columns", inplace=True)
+    gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    gdf.set_geometry("geom", inplace=True)
 
-    # Get discharge cols of interest
-    cols = [
-        # "KONSMENGD5BOF10",  # Included in 'store anlegg' dataset
-        # "KONSMENGDKOF10",  # Included in 'store anlegg' dataset
-        # "KONSMENGDTOTN10",  # Included in 'store anlegg' dataset
-        # "KONSMENGDTOTP10",  # Included in 'store anlegg' dataset
+    # Join treatment types
+    types_path = os.path.join(
+        data_fold, f"avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx"
+    )
+    typ_df = pd.read_excel(types_path, sheet_name="data")
+    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS"]]
+    typ_df.columns = ["site_id", "type"]
+    typ_df.dropna(how="all", inplace=True)
+    typ_df["type"].replace({"?": "Annen rensing"}, inplace=True)
+    gdf = gdf.merge(typ_df, how="left", on="site_id")
+    gdf["type"].fillna("Annen rensing", inplace=True)
+    gdf.reset_index(drop=True, inplace=True)
+    id_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    val_cols = [
         "KONSMENGDSS10",
         "MILJOGIFTAS2",
         "MILJOGIFTCD2",
@@ -985,86 +1045,77 @@ def read_raw_miljogifter_data(xl_path, sheet_name):
         "MILJOGIFTPB2",
         "MILJOGIFTZN2",
     ]
-    df = df[["ANLEGGSNR"] + cols]
-    df.dropna(subset=cols, how="all", inplace=True)
-    df.columns = ["site_id"] + [f"{col}_kg" for col in cols]
-    df = df.melt(id_vars="site_id").dropna(subset="value")
+    gdf = gdf[id_cols + val_cols]
 
-    return loc_gdf, df
+    # Add units
+    units_dict = {par: f"{par}_kg" for par in val_cols}
+    gdf.rename(units_dict, axis="columns", inplace=True)
+
+    return gdf
 
 
-def read_raw_industry_data(xl_path, sheet_name):
+def read_raw_industry_data(data_fold, year, eng):
     """Reads the raw industry data provided by Miljødirektoratet.
 
     Args
-        xl_path:    Str. Path to Excel file from Miljødirektoratet
-        sheet_name: Str. Worksheet to read
+        data_fold: Str. Folder containg raw data files, with the file structure as
+                   described above
+        year:      Int. Year being processed
+        eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
-        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
-        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
-        site.
+        Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
     """
-    assert isinstance(xl_path, str), "'xl_path' must be a valid file path."
-    assert isinstance(sheet_name, str), "'sheet_name' must be a string."
+    assert isinstance(data_fold, str), "'data_fold' must be a valid file path."
+    assert isinstance(year, int), "'year' must be an integer."
 
-    df = pd.read_excel(xl_path, sheet_name=sheet_name)
+    ind_path = os.path.join(data_fold, f"industri_{year}_raw.xlsx")
+    df = pd.read_excel(ind_path, sheet_name=f"industri_{year}")
     df.dropna(how="all", inplace=True)
-    assert (
-        len(df["År"].unique()) == 1
-    ), f"The industry dataset includes values for several years:\n{df['År'].unique()}"
-    df["type"] = "Industry"
-
-    # Get location info
-    loc_gdf = df[
-        [
-            "Anleggsnr",
-            "Anleggsnavn",
-            "type",
-            "Geografisk Longitude",
-            "Geografisk Latitude",
-        ]
-    ].copy()
-    loc_gdf.columns = [
-        "site_id",
-        "name",
-        "type",
-        "lon",
-        "lat",
-    ]
-    loc_gdf.drop_duplicates(inplace=True)
+    if len(df["År"].unique()) > 1:
+        print(
+            f"WARNING: The industry dataset includes values for several years. Only data for {year} will be processed."
+        )
+        df = df.query("`År` == @year")
+    df["sector"] = "Industry"
+    df["year"] = year
+    df.rename(
+        {
+            "Anleggsnr": "site_id",
+            "Anleggsnavn": "name",
+            "Anleggsaktivitet": "type",
+            "Geografisk Longitude": "lon",
+            "Geografisk Latitude": "lat",
+            "Mengde": "value",
+        },
+        axis="columns",
+        inplace=True,
+    )
 
     # Convert lat/lon => EPSG 25833
-    loc_gdf = gpd.GeoDataFrame(
-        loc_gdf,
-        geometry=gpd.points_from_xy(loc_gdf["lon"], loc_gdf["lat"], crs="epsg:4326"),
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
     )
-    loc_gdf = loc_gdf.to_crs("epsg:25833")
-    loc_gdf = loc_gdf[["site_id", "name", "type", "geometry"]]
-    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    loc_gdf.set_geometry("geom", inplace=True)
-    loc_gdf.reset_index(drop=True, inplace=True)
-
-    # Get discharge cols of interest
-    df = df[["Anleggsnr", "Anleggsaktivitet", "Komp.kode", "Mengde", "Enhet"]]
-    df["Enhet"].replace({"tonn": "tonnes"}, inplace=True)
-    df["variable"] = df["Komp.kode"] + "_" + df["Enhet"]
-    df = df[["Anleggsnr", "Anleggsaktivitet", "variable", "Mengde"]]
-    df.columns = ["site_id", "treatment_type", "variable", "value"]
-    df.dropna(subset="value", inplace=True)
-    df = df.query("value > 0")
+    gdf = gdf.to_crs("epsg:25833")
+    gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
+    gdf.set_geometry("geom", inplace=True)
+    gdf.reset_index(drop=True, inplace=True)
+    gdf["Enhet"].replace({"tonn": "tonnes"}, inplace=True)
+    gdf["variable"] = gdf["Komp.kode"] + "_" + gdf["Enhet"]
 
     # Ignore some pars as they overlap with estimates based on TOTN and TOTP
-    # TO DO: Consdier using these value where reported (although no NO3, so may not be accurate)
     ignore_par_list = ["NH3", "NH4-N", "P-ORTO"]
-    df = df.query("variable not in @ignore_par_list")
+    gdf = gdf.query("`Komp.kode` not in @ignore_par_list")
+
+    id_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    val_cols = ["variable", "value"]
+    gdf = gdf[id_cols + val_cols]
 
     # Convert to wide format
-    df = df.pivot(
-        index=["site_id", "treatment_type"], columns="variable", values="value"
-    ).reset_index()
+    gdf = gdf.pivot(index=id_cols, columns="variable", values="value").reset_index()
 
-    return loc_gdf, df
+    return gdf
 
 
 def read_large_wastewater_and_industry_data(data_fold, year, eng):
@@ -1081,15 +1132,13 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
         ├─ avlop_miljogifter_{year}_raw.xlsx
         │  ├─ miljogifter_{year} [worksheet]
         │
-        ├─ industry_{year}_raw.xlsx
-        │  ├─ industry_{year} [worksheet]
+        ├─ industri_{year}_raw.xlsx
+        │  ├─ industri_{year} [worksheet]
 
     This function reads all the raw files and combines site locations and data values
-    into a geodataframe and a dataframe, respectively. Subfractions of TOTN and TOTP
-    are estimated, TOC is estimated from BOF5 and KOF, and SS is included where
-    reported. Parameter names are mapped to input parameter IDs in the database, and
-    duplicates are removed. Sites without coordinates are highlighted, and the database
-    checked to identify new sites to be uploaded.
+    into a geodataframe and a dataframe, respectively. Parameter names are mapped to
+    input parameter IDs in the database, and duplicates are removed. Sites without
+    coordinates are highlighted.
 
     Args
         data_fold: Str. Folder containg raw data files, with the file structure as
@@ -1098,46 +1147,36 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
         eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
-        Tuple of (geo)dataframes (loc_gdf, df), or (None, df). 'loc_gdf' is a point
-        geodataframe of site co-ordinates that are not already in the database (in
-        EPSG 25833); 'df' is a dataframe of discharges from each site. If there are no
-        new sites to add, None is returned instead of 'loc_gdf'.
+        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
+        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
+        site.
     """
     assert isinstance(data_fold, str), "'data_fold' must be a valid file path."
     assert isinstance(year, int), "'year' must be an integer."
 
     # Read raw data
-    stan_path = os.path.join(data_fold, f"avlop_stor_anlegg_{year}_raw.xlsx")
-    miljo_path = os.path.join(data_fold, f"avlop_miljogifter_{year}_raw.xlsx")
-    ind_path = os.path.join(data_fold, f"industry_{year}_raw.xlsx")
-    treat_types_path = os.path.join(
-        data_fold, f"avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx"
-    )
-    stan_loc_gdf, stan_df = read_raw_large_wastewater_data(
-        stan_path,
-        f"store_anlegg_{year}",
-        treat_types_path,
-        "data",
-    )
-    miljo_loc_gdf, miljo_df = read_raw_miljogifter_data(
-        miljo_path, f"miljogifter_{year}"
-    )
-    ind_loc_gdf, ind_df = read_raw_industry_data(ind_path, f"industry_{year}")
+    stan_gdf = read_raw_large_wastewater_data(data_fold, year, eng)
+    miljo_gdf = read_raw_miljogifter_data(data_fold, year, eng)
+    ind_gdf = read_raw_industry_data(data_fold, year, eng)
 
     # Estimate TOC from BOF and KOF
-    stan_df = estimate_toc_from_bof_kof(stan_df, "Large wastewater")
-    ind_df = estimate_toc_from_bof_kof(ind_df, "Industry")
+    stan_gdf = estimate_toc_from_bof_kof(stan_gdf, "Large wastewater")
+    ind_gdf = estimate_toc_from_bof_kof(ind_gdf, "Industry")
 
     # Subdivide TOTN and TOTP
-    stan_df = subdivide_point_source_n_and_p(
-        stan_df, "Large wastewater", "TOTN_kg", "TOTP_kg"
+    stan_gdf = subdivide_point_source_n_and_p(
+        stan_gdf, "Large wastewater", "TOTN_kg", "TOTP_kg"
     )
-    ind_df = subdivide_point_source_n_and_p(
-        ind_df, "Industry", "N-TOT_tonnes", "P-TOT_tonnes"
+    ind_gdf = subdivide_point_source_n_and_p(
+        ind_gdf, "Industry", "N-TOT_tonnes", "P-TOT_tonnes"
     )
 
-    # Combine 'values' dfs
-    df = pd.concat([stan_df, miljo_df, ind_df], axis="rows")
+    # Combine and split into locations and data (in 'long' format)
+    gdf = pd.concat([stan_gdf, miljo_gdf, ind_gdf], axis="rows")
+    loc_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    val_cols = ["site_id", "year"] + [col for col in gdf.columns if col not in loc_cols]
+    loc_gdf = gdf[loc_cols].copy()
+    df = pd.DataFrame(gdf[val_cols]).melt(id_vars=["site_id", "year"])
     df = df.query("value > 0")
 
     # Convert to par_ids used in database
@@ -1167,11 +1206,11 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
 
     # Convert to db IDs
     df["in_par_id"] = df["variable"].map(par_map)
-    df["year"] = year
 
     # Process locations
-    loc_gdf = pd.concat([stan_loc_gdf, miljo_loc_gdf, ind_loc_gdf], axis="rows")
-    loc_gdf.drop_duplicates(subset=["site_id", "type"], keep="first", inplace=True)
+    loc_gdf.drop_duplicates(
+        subset=["site_id", "sector", "type"], keep="first", inplace=True
+    )
     if not loc_gdf["site_id"].is_unique:
         dup_df = loc_gdf[loc_gdf.duplicated(subset="site_id", keep=False)].sort_values(
             "site_id"
@@ -1186,47 +1225,24 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
     # Check for missing co-ords. See
     # https://geopandas.org/en/stable/docs/user_guide/missing_empty.html
     no_coords_gdf = loc_gdf[loc_gdf["geom"].is_empty | loc_gdf["geom"].isna()][
-        ["site_id", "name", "type"]
+        ["site_id", "name"]
     ].sort_values("site_id")
-    print(
-        f"{len(no_coords_gdf)} locations do not have co-ordinates in this year's data."
-    )
-    # print(no_coords_df)
+    if len(no_coords_gdf) > 0:
+        print(
+            f"{len(no_coords_gdf)} locations do not have co-ordinates in this year's data."
+        )
+        print(no_coords_gdf)
 
     # Drop values for sites without co-ords
     no_coords_ids = no_coords_gdf["site_id"].tolist()
     df = df.query("site_id not in @no_coords_ids")
     df = df[["site_id", "in_par_id", "year", "value"]]
     df.reset_index(inplace=True, drop=True)
-    assert df.notnull().all().all(), "'df' contains NaNs."
+    loc_gdf = loc_gdf.query("site_id not in @no_coords_ids")
 
-    # Check for sites not already in db
-    sql = text(
-        """SELECT DISTINCT(site_id) FROM teotil3.point_source_locations
-           WHERE type IN ('Wastewater', 'Industry')
-        """
-    )
-    in_db_df = pd.read_sql_query(sql, eng)
-    not_in_db = set(loc_gdf["site_id"].values) - set(in_db_df["site_id"].values)
-    not_in_db_gdf = loc_gdf[loc_gdf["site_id"].isin(list(not_in_db))].drop_duplicates(
-        subset=["site_id"]
-    )
-    not_in_db_gdf.set_geometry("geom", inplace=True)
-    not_in_db_gdf.reset_index(inplace=True, drop=True)
-    if len(not_in_db_gdf) > 0:
-        not_in_db_no_coords_gdf = not_in_db_gdf[
-            not_in_db_gdf["site_id"].isin(no_coords_gdf["site_id"])
-        ].sort_values("site_id")
-        print(f"{len(not_in_db_gdf)} locations are not in the database.")
-        print(
-            len(not_in_db_no_coords_gdf),
-            "locations are not in the database and do not have "
-            "co-ordinates (and therefore must be ignored)",
-        )
+    assert set(df["site_id"]).issubset(set(loc_gdf["site_id"]))
 
-        return not_in_db_gdf, df
-
-    return None, df
+    return loc_gdf, df
 
 
 def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
@@ -1242,7 +1258,7 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     else:
         admin_year = year
     try:
-        sql = text(f"SELECT komnr_{admin_year} AS komnr FROM teotil3.regine_2022")
+        sql = text(f"SELECT komnr_{admin_year} AS komnr FROM teotil3.regines")
         reg_kom_df = pd.read_sql(sql, eng)
     except exc.ProgrammingError:
         raise ValueError(
@@ -1252,6 +1268,8 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
 
     df = pd.read_excel(xl_path, sheet_name=sheet_name)
     df.dropna(how="all", inplace=True)
+    df = df.query("year == @year")
+    del df["year"]
     df.rename({"KOMMUNENR": "komnr"}, axis="columns", inplace=True)
 
     # Komnr. should be a 4 char string, not a float
@@ -1264,16 +1282,18 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
         "komnr"
     ].is_unique, f"Dataset contains duplicated kommuner: {list(df['komnr'].unique())}"
     df["komnr"].replace({"1245": "1246"}, inplace=True)
-    df = df.groupby("komnr").sum().reset_index()
+    df = df.groupby("komnr").sum(numeric_only=True).reset_index()
 
     # Restructure data
     df = df.melt(id_vars="komnr")
+    df["sector"] = "Small wastewater"
     df["variable"] = df["variable"].str.replace("FOSFOR ", "TOTP_kg;")
     df["variable"] = df["variable"].str.replace("NITROGEN ", "TOTN_kg;")
-    df[["variable", "treatment_type"]] = df["variable"].str.split(";", 1, expand=True)
+    df["variable"] = df["variable"].str.replace("BOF ", "BOF5_kg;")
+    df[["variable", "type"]] = df["variable"].str.split(";", n=1, expand=True)
     # Ignore 'Tett tank (for alt avløpsvann)' as it is always zero (it's transported to the "large" plants)
-    df = df.query("treatment_type != 'Tett tank (for alt avløpsvann)'")
-    df.set_index(["komnr", "variable", "treatment_type"], inplace=True)
+    df = df.query("type != 'Tett tank (for alt avløpsvann)'")
+    df.set_index(["komnr", "variable", "sector", "type"], inplace=True)
     df = df.unstack("variable")
     df.columns = df.columns.get_level_values(1)
     df.reset_index(inplace=True)
@@ -1281,6 +1301,13 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
 
     # Subdivide TOTN and TOTP
     df = subdivide_point_source_n_and_p(df, "Small wastewater", "TOTN_kg", "TOTP_kg")
+
+    # Estimate TOC from BOF5
+    df["KOF_kg"] = np.nan
+    df = estimate_toc_from_bof_kof(df, "Small wastewater")
+
+    # Sum totals for each type back to kommune level
+    df = df.groupby("komnr").sum(numeric_only=True).reset_index()
 
     # Check komnrs in SSB data are found in the admin data for this year
     not_in_db = set(df["komnr"].values) - set(reg_kom_df["komnr"].values)
@@ -1305,7 +1332,7 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     return df
 
 
-def subdivide_point_source_n_and_p(df, site_type, totn_col, totp_col):
+def subdivide_point_source_n_and_p(gdf, sector, totn_col, totp_col):
     """Subdivide TOTN and TOTP from wastewater, industry or aquaculture. Uses typical
     fractions for different types of treatment plant, based on Christian Vogelsang's
     literature review. See the file here for details:
@@ -1313,24 +1340,24 @@ def subdivide_point_source_n_and_p(df, site_type, totn_col, totp_col):
     https://github.com/NIVANorge/teotil3/blob/main/data/point_source_treatment_types.csv
 
     Args
-        df:        Dataframe of discharges. Must include columns for site or kommune ID,
-                   treatment type, TOTN and TOTP
-        site_type: Str. Type of sites being processed. Must be one of
-                   ["Large wastewater", "Small wastewater", "Industry", "Aquaculture"]
-        totn_col:  Str. Name of column in 'df' with TOTN data
-        totp_col:  Str. Name of column in 'df' with TOTP data
+        gdf:      Geodataframe of discharges. Must include columns for site or kommune ID,
+                  treatment type, year, TOTN and TOTP
+        sector :  Str. Type of sites being processed. Must be one of
+                  ["Large wastewater", "Small wastewater", "Industry", "Aquaculture"]
+        totn_col: Str. Name of column in 'gdf' with TOTN data
+        totp_col: Str. Name of column in 'gdf' with TOTP data
 
     Returns
-        Dataframe in long format with columns 'site_id', 'variable' and 'value'.
+        Geodataframe. 'gdf' is returned with columns for subfractions added.
     """
     assert isinstance(totn_col, str), "'totn_col' must be a string."
     assert isinstance(totp_col, str), "'totp_col' must be a string."
-    site_types = ["Large wastewater", "Small wastewater", "Industry", "Aquaculture"]
-    assert site_type in site_types, f"{site_type} must be one of {site_types}."
+    sectors = ["Large wastewater", "Small wastewater", "Industry", "Aquaculture"]
+    assert sector in sectors, f"{sector} must be one of {sectors}."
 
     url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/point_source_treatment_types.csv"
     prop_df = pd.read_csv(url)
-    prop_df = prop_df.query("site_type == @site_type")
+    prop_df = prop_df.query("sector == @sector")
 
     assert (
         prop_df["prop_din"] + prop_df["prop_ton"] == 1
@@ -1338,11 +1365,11 @@ def subdivide_point_source_n_and_p(df, site_type, totn_col, totp_col):
     assert (
         prop_df["prop_tpp"] + prop_df["prop_tdp"] == 1
     ).all(), "Proportions for TPP and TDP do not sum to one."
-    assert set(df["treatment_type"]).issubset(
-        set(prop_df["treatment_type"])
-    ), f"'df' contains unknown treatment types: {set(df['treatment_type']) - set(prop_df['treatment_type'])}."
+    assert set(gdf["type"]).issubset(
+        set(prop_df["type"])
+    ), f"'gdf' contains unknown treatment types: {set(gdf['type']) - set(prop_df['type'])}."
 
-    df = pd.merge(df, prop_df, how="left", on="treatment_type")
+    gdf = gdf.merge(prop_df, how="left", on=["sector", "type"])
 
     fracs = ["DIN", "TON", "TPP", "TDP"]
     for frac in fracs:
@@ -1357,23 +1384,19 @@ def subdivide_point_source_n_and_p(df, site_type, totn_col, totp_col):
             unit_factor = 1
         else:
             raise ValueError("Unit not recognised.")
-        df[f"{frac}_kg"] = unit_factor * df[tot_col] * df[f"prop_{frac.lower()}"]
+        gdf[f"{frac}_kg"] = unit_factor * gdf[tot_col] * gdf[f"prop_{frac.lower()}"]
 
     # Delete unnecessary cols
     for col in prop_df.columns:
-        del df[col]
+        if col not in ["sector", "type"]:
+            del gdf[col]
 
-    if site_type == "Small wastewater":
-        df = df.groupby("komnr").sum().reset_index()
-    else:
-        df = df.melt(id_vars="site_id").dropna(subset="value")
-
-    return df
+    return gdf
 
 
-def estimate_toc_from_bof_kof(df, site_type):
-    """Estimate TOC from KOF and/or BOF. Applies to the 'miljøgifter' (i.e. "large" wastewater") and
-    'industry' datasets. For each treatment type, uses the best relationship identified by Christian
+def estimate_toc_from_bof_kof(gdf, sector):
+    """Estimate TOC from KOF and/or BOF. Applies to the wastewater and industry datasets.
+    For each treatment type, uses the best relationship identified by Christian
     Vogelsang to predict from TOC from either KOF or BOF. All relationships have the form
 
         TOC = k1 * KOF^k2 + k3 or TOC = b1 * BOF^b2 + b3
@@ -1383,50 +1406,49 @@ def estimate_toc_from_bof_kof(df, site_type):
     https://github.com/NIVANorge/teotil3/blob/main/data/point_source_treatment_types.csv
 
     Args
-        df:        Dataframe of discharges. Must include columns for site, treatment type and BOF/KOF
-        site_type: Str. Type of sites being processed. Must be one of
-                   ["Large wastewater", "Industry"]
+        gdf:    (Geo)dataframe of discharges. Must include columns for site/kommune, treatment
+                type and BOF/KOF
+        sector: Str. Type of sites being processed. Must be one of
+                ["Large wastewater", "Small wastewater", "Industry"]
 
     Returns
-        Dataframe in long format with columns 'site_id', 'variable' and 'value'.
+        Geodataframe in same format as 'gdf', but with TOC added.
     """
-    site_types = ["Large wastewater", "Industry"]
-    assert site_type in site_types, f"{site_type} must be one of {site_types}."
+    sectors = ["Large wastewater", "Small wastewater", "Industry"]
+    assert sector in sectors, f"{sector} must be one of {sectors}."
 
     url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/point_source_treatment_types.csv"
     prop_df = pd.read_csv(url)
-    prop_df = prop_df.query("site_type == @site_type")
+    prop_df = prop_df.query("sector == @sector")
 
-    assert set(df["treatment_type"]).issubset(
-        set(prop_df["treatment_type"])
-    ), f"'df' contains unknown treatment types: {set(df['treatment_type']) - set(prop_df['treatment_type'])}."
+    assert set(gdf["type"]).issubset(
+        set(prop_df["type"])
+    ), f"'gdf' contains unknown treatment types: {set(gdf['type']) - set(prop_df['type'])}."
 
-    if site_type == "Large wastewater":
-        bof_col = "BOF5"
-        kof_col = "KOF"
-        unit = "kg"
-    else:
+    if sector == "Industry":
         bof_col = "BOF5"
         kof_col = "KOF"
         unit = "tonnes"
+    else:
+        bof_col = "BOF5"
+        kof_col = "KOF"
+        unit = "kg"
 
-    df = pd.merge(df, prop_df, how="left", on="treatment_type")
+    gdf = gdf.merge(prop_df, how="left", on=["sector", "type"])
 
     # Estimate TOC. Use KOF if available, otherwise BOF
-    df[f"TOC_BOF_{unit}"] = df["bof_fac"] * df[f"{bof_col}_{unit}"]
-    df[f"TOC_KOF_{unit}"] = df["kof_fac"] * df[f"{kof_col}_{unit}"]
-    if f"TOC_{unit}" in df.columns:
-        df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_KOF_{unit}"])
+    gdf[f"TOC_BOF_{unit}"] = gdf["bof_fac"] * gdf[f"{bof_col}_{unit}"]
+    gdf[f"TOC_KOF_{unit}"] = gdf["kof_fac"] * gdf[f"{kof_col}_{unit}"]
+    if f"TOC_{unit}" in gdf.columns:
+        gdf[f"TOC_{unit}"] = gdf[f"TOC_{unit}"].combine_first(gdf[f"TOC_KOF_{unit}"])
     else:
-        df[f"TOC_{unit}"] = df[f"TOC_KOF_{unit}"]
-    df[f"TOC_{unit}"] = df[f"TOC_{unit}"].combine_first(df[f"TOC_BOF_{unit}"])
-    del df[f"TOC_BOF_{unit}"], df[f"TOC_KOF_{unit}"]
+        gdf[f"TOC_{unit}"] = gdf[f"TOC_KOF_{unit}"]
+    gdf[f"TOC_{unit}"] = gdf[f"TOC_{unit}"].combine_first(gdf[f"TOC_BOF_{unit}"])
+    del gdf[f"TOC_BOF_{unit}"], gdf[f"TOC_KOF_{unit}"]
 
     # Delete unnecessary cols
     for col in prop_df.columns:
-        if col == "treatment_type":
-            pass
-        else:
-            del df[col]
+        if col not in ["sector", "type"]:
+            del gdf[col]
 
-    return df
+    return gdf
