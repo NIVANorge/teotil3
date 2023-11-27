@@ -759,7 +759,7 @@ def get_annual_point_data(
                 b.regine
             FROM teotil3.point_source_locations a,
                 teotil3.regines b
-            WHERE ST_WITHIN(a.geom, b.geom)
+            WHERE ST_WITHIN(a.outlet_geom, b.geom)
             ) d
         WHERE a.in_par_id = b.in_par_id
             AND b.out_par_id = c.out_par_id

@@ -556,14 +556,14 @@ def read_raw_aquaculture_data(xl_path, sheet_name, year):
         df, geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326")
     )
     loc_gdf = loc_gdf.to_crs("epsg:25833")
-    loc_gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    loc_gdf.set_geometry("geom", inplace=True)
+    loc_gdf.rename({"geometry": "outlet_geom"}, axis="columns", inplace=True)
+    loc_gdf["site_geom"] = loc_gdf["outlet_geom"].copy()
+    loc_gdf.set_geometry("outlet_geom", inplace=True)
     loc_gdf.reset_index(drop=True, inplace=True)
 
     # The name sometimes changes even if the site is identical
-    loc_gdf = loc_gdf[
-        ["site_id", "name", "sector", "type", "year", "geom"]
-    ].drop_duplicates(subset=["site_id", "sector", "type", "year", "geom"])
+    uniq_cols = ["site_id", "sector", "type", "year", "site_geom", "outlet_geom"]
+    loc_gdf = loc_gdf[uniq_cols + ["name"]].drop_duplicates(subset=uniq_cols)
 
     return loc_gdf, df
 
@@ -890,7 +890,7 @@ def utm_to_wgs84_dd(utm_df, zone="utm_zone", east="utm_east", north="utm_north")
     return df
 
 
-def read_raw_large_wastewater_data(data_fold, year, eng):
+def read_raw_large_wastewater_data(data_fold, year):
     """Reads the raw, gap-filled data for TOTN, TOTP, BOF5 and KOF from "large" (>50 p.e.)
     wastewater treatment sites provided by SSB. Note that this dataset includes some data
     that is duplicated in the "miljøgifter" dataset.
@@ -899,7 +899,6 @@ def read_raw_large_wastewater_data(data_fold, year, eng):
         data_fold: Str. Folder containg raw data files, with the file structure as
                    described above
         year:      Int. Year being processed
-        eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
         Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
@@ -920,9 +919,12 @@ def read_raw_large_wastewater_data(data_fold, year, eng):
         {
             "ANLEGGSNR": "site_id",
             "ANLEGGSNAVN": "name",
-            "Sone": "zone",
-            "UTM_E": "east",
-            "UTM_N": "north",
+            "Sone": "site_zone",
+            "UTM_E": "site_east",
+            "UTM_N": "site_north",
+            "Sone_Utslipp": "outlet_zone",
+            "UTM_E_Utslipp": "outlet_east",
+            "UTM_N_Utslipp": "outlet_north",
             "MENGDE_P_UT_kg": "TOTP_kg",
             "MENGDE_N_UT_kg": "TOTN_kg",
         },
@@ -930,23 +932,49 @@ def read_raw_large_wastewater_data(data_fold, year, eng):
         inplace=True,
     )
     df.drop_duplicates(
-        subset=["site_id", "name", "zone", "east", "north"], inplace=True
+        subset=[
+            "site_id",
+            "name",
+            "site_zone",
+            "site_east",
+            "site_north",
+        ],
+        inplace=True,
     )
 
-    # Convert UTM Zone to Pandas' nullable integer data type
-    # (because proj. complains about float UTM zones)
-    df["zone"] = df["zone"].astype(pd.Int64Dtype())
+    # If the outlet co-ords aren't known, use the site co-ords instead
+    for col in ["zone", "east", "north"]:
+        df[f"outlet_{col}"].fillna(df[f"site_{col}"], inplace=True)
+
+    # Only sites in valid UTM zones
+    for loc in ["site", "outlet"]:
+        if df[f"{loc}_zone"].min() < 31 or df[f"{loc}_zone"].max() > 36:
+            print(
+                f"'{loc}_zone' column in Large Wastewater contains values outside valid range [31, 36]. These will be dropped."
+            )
+            df = df.query(f"31 <= {loc}_zone <= 36")
 
     # Convert mixed UTM => lat/lon => EPSG 25833
-    df = utm_to_wgs84_dd(df, "zone", "east", "north")
-    gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
-    )
-    gdf = gdf.to_crs("epsg:25833")
-    gdf.drop(["lon", "lat", "zone", "east", "north"], axis="columns", inplace=True)
-    gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    gdf.set_geometry("geom", inplace=True)
+    geom_df = pd.DataFrame()
+    for loc in ["site", "outlet"]:
+        # Convert UTM Zone to Pandas' nullable integer data type
+        # (because proj. complains about float UTM zones)
+        df[f"{loc}_zone"] = df[f"{loc}_zone"].astype(pd.Int64Dtype())
+        df = utm_to_wgs84_dd(df, f"{loc}_zone", f"{loc}_east", f"{loc}_north")
+        gdf = gpd.GeoDataFrame(
+            df,
+            geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
+        )
+        gdf = gdf.to_crs("epsg:25833")
+        df.drop(
+            ["lon", "lat", f"{loc}_zone", f"{loc}_east", f"{loc}_north"],
+            axis="columns",
+            inplace=True,
+        )
+        gdf.rename({"geometry": f"{loc}_geom"}, axis="columns", inplace=True)
+        geom_df = pd.concat([geom_df, gdf[f"{loc}_geom"]], axis=1)
+    gdf = gpd.GeoDataFrame(pd.concat([df, geom_df], axis=1))
+    gdf.set_geometry("outlet_geom", inplace=True)
 
     # Join treatment types, BOF5 and KOF
     types_path = os.path.join(
@@ -962,14 +990,14 @@ def read_raw_large_wastewater_data(data_fold, year, eng):
     gdf["BOF5_kg"].fillna(0, inplace=True)
     gdf["KOF_kg"].fillna(0, inplace=True)
     gdf.reset_index(drop=True, inplace=True)
-    id_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    id_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
     val_cols = ["TOTP_kg", "TOTN_kg", "BOF5_kg", "KOF_kg"]
     gdf = gdf[id_cols + val_cols]
 
     return gdf
 
 
-def read_raw_miljogifter_data(data_fold, year, eng):
+def read_raw_miljogifter_data(data_fold, year):
     """Reads the raw, not-gap-filled data for "large" (>50 p.e.) wastewater treatment
     sites provided by SSB. Note that the 'miljøgifter' dataset includes some data
     that is duplicated in the "store anlegg" dataset.
@@ -978,7 +1006,6 @@ def read_raw_miljogifter_data(data_fold, year, eng):
         data_fold: Str. Folder containg raw data files, with the file structure as
                    described above
         year:      Int. Year being processed
-        eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
         Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
@@ -995,31 +1022,60 @@ def read_raw_miljogifter_data(data_fold, year, eng):
         {
             "ANLEGGSNR": "site_id",
             "ANLEGGSNAVN": "name",
-            "SONEBELTE": "zone",
-            "UTMOST": "east",
-            "UTMNORD": "north",
+            "SONEBELTE": "site_zone",
+            "UTMOST": "site_east",
+            "UTMNORD": "site_north",
+            "RESIP2": "outlet_zone",
+            "RESIP3": "outlet_east",
+            "RESIP4": "outlet_north",
         },
         axis="columns",
         inplace=True,
     )
     df.drop_duplicates(
-        subset=["site_id", "name", "zone", "east", "north"], inplace=True
+        subset=[
+            "site_id",
+            "name",
+            "site_zone",
+            "site_east",
+            "site_north",
+        ],
+        inplace=True,
     )
 
-    # Convert UTM Zone to Pandas' nullable integer data type
-    # (because proj. complains about float UTM zones)
-    df["zone"] = df["zone"].astype(pd.Int64Dtype())
+    # If the outlet co-ords aren't known, use the site co-ords instead
+    for col in ["zone", "east", "north"]:
+        df[f"outlet_{col}"].fillna(df[f"site_{col}"], inplace=True)
+
+    # Only sites in valid UTM zones
+    for loc in ["site", "outlet"]:
+        if df[f"{loc}_zone"].min() < 31 or df[f"{loc}_zone"].max() > 36:
+            print(
+                f"'{loc}_zone' column in Miljøgifter dataset contains values outside valid range [31, 36]. These will be dropped."
+            )
+            df = df.query(f"31 <= {loc}_zone <= 36").copy()
 
     # Convert mixed UTM => lat/lon => EPSG 25833
-    df = utm_to_wgs84_dd(df, "zone", "east", "north")
-    gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
-    )
-    gdf = gdf.to_crs("epsg:25833")
-    gdf.drop(["lon", "lat", "zone", "east", "north"], axis="columns", inplace=True)
-    gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    gdf.set_geometry("geom", inplace=True)
+    geom_df = pd.DataFrame()
+    for loc in ["site", "outlet"]:
+        # Convert UTM Zone to Pandas' nullable integer data type
+        # (because proj. complains about float UTM zones)
+        df[f"{loc}_zone"] = df[f"{loc}_zone"].astype(pd.Int64Dtype())
+        df = utm_to_wgs84_dd(df, f"{loc}_zone", f"{loc}_east", f"{loc}_north")
+        gdf = gpd.GeoDataFrame(
+            df,
+            geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
+        )
+        gdf = gdf.to_crs("epsg:25833")
+        df.drop(
+            ["lon", "lat", f"{loc}_zone", f"{loc}_east", f"{loc}_north"],
+            axis="columns",
+            inplace=True,
+        )
+        gdf.rename({"geometry": f"{loc}_geom"}, axis="columns", inplace=True)
+        geom_df = pd.concat([geom_df, gdf[f"{loc}_geom"]], axis=1)
+    gdf = gpd.GeoDataFrame(pd.concat([df, geom_df], axis=1))
+    gdf.set_geometry("outlet_geom", inplace=True)
 
     # Join treatment types
     types_path = os.path.join(
@@ -1033,7 +1089,7 @@ def read_raw_miljogifter_data(data_fold, year, eng):
     gdf = gdf.merge(typ_df, how="left", on="site_id")
     gdf["type"].fillna("Annen rensing", inplace=True)
     gdf.reset_index(drop=True, inplace=True)
-    id_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    id_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
     val_cols = [
         "KONSMENGDSS10",
         "MILJOGIFTAS2",
@@ -1054,14 +1110,13 @@ def read_raw_miljogifter_data(data_fold, year, eng):
     return gdf
 
 
-def read_raw_industry_data(data_fold, year, eng):
+def read_raw_industry_data(data_fold, year):
     """Reads the raw industry data provided by Miljødirektoratet.
 
     Args
         data_fold: Str. Folder containg raw data files, with the file structure as
                    described above
         year:      Int. Year being processed
-        eng:       Obj. Active database connection object connected to PostGIS
 
     Returns
         Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
@@ -1084,22 +1139,39 @@ def read_raw_industry_data(data_fold, year, eng):
             "Anleggsnr": "site_id",
             "Anleggsnavn": "name",
             "Anleggsaktivitet": "type",
-            "Geografisk Longitude": "lon",
-            "Geografisk Latitude": "lat",
+            "Geografisk Longitude": "site_lon",
+            "Geografisk Latitude": "site_lat",
+            "Lon_Utslipp": "outlet_lon",
+            "Lat_Utslipp": "outlet_lat",
             "Mengde": "value",
         },
         axis="columns",
         inplace=True,
     )
 
+    # If the outlet co-ords aren't known, use the site co-ords instead
+    for col in ["lon", "lat"]:
+        df[f"outlet_{col}"].fillna(df[f"site_{col}"], inplace=True)
+
     # Convert lat/lon => EPSG 25833
-    gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df["lon"], df["lat"], crs="epsg:4326"),
-    )
-    gdf = gdf.to_crs("epsg:25833")
-    gdf.rename({"geometry": "geom"}, axis="columns", inplace=True)
-    gdf.set_geometry("geom", inplace=True)
+    geom_df = pd.DataFrame()
+    for loc in ["site", "outlet"]:
+        gdf = gpd.GeoDataFrame(
+            df,
+            geometry=gpd.points_from_xy(
+                df[f"{loc}_lon"], df[f"{loc}_lat"], crs="epsg:4326"
+            ),
+        )
+        gdf = gdf.to_crs("epsg:25833")
+        df.drop(
+            [f"{loc}_lon", f"{loc}_lat"],
+            axis="columns",
+            inplace=True,
+        )
+        gdf.rename({"geometry": f"{loc}_geom"}, axis="columns", inplace=True)
+        geom_df = pd.concat([geom_df, gdf[f"{loc}_geom"]], axis=1)
+    gdf = gpd.GeoDataFrame(pd.concat([df, geom_df], axis=1))
+    gdf.set_geometry("outlet_geom", inplace=True)
     gdf.reset_index(drop=True, inplace=True)
     gdf["Enhet"].replace({"tonn": "tonnes"}, inplace=True)
     gdf["variable"] = gdf["Komp.kode"] + "_" + gdf["Enhet"]
@@ -1108,7 +1180,7 @@ def read_raw_industry_data(data_fold, year, eng):
     ignore_par_list = ["NH3", "NH4-N", "P-ORTO"]
     gdf = gdf.query("`Komp.kode` not in @ignore_par_list")
 
-    id_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    id_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
     val_cols = ["variable", "value"]
     gdf = gdf[id_cols + val_cols]
 
@@ -1155,9 +1227,9 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
     assert isinstance(year, int), "'year' must be an integer."
 
     # Read raw data
-    stan_gdf = read_raw_large_wastewater_data(data_fold, year, eng)
-    miljo_gdf = read_raw_miljogifter_data(data_fold, year, eng)
-    ind_gdf = read_raw_industry_data(data_fold, year, eng)
+    stan_gdf = read_raw_large_wastewater_data(data_fold, year)
+    miljo_gdf = read_raw_miljogifter_data(data_fold, year)
+    ind_gdf = read_raw_industry_data(data_fold, year)
 
     # Estimate TOC from BOF and KOF
     stan_gdf = estimate_toc_from_bof_kof(stan_gdf, "Large wastewater")
@@ -1173,7 +1245,7 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
 
     # Combine and split into locations and data (in 'long' format)
     gdf = pd.concat([stan_gdf, miljo_gdf, ind_gdf], axis="rows")
-    loc_cols = ["site_id", "name", "sector", "type", "year", "geom"]
+    loc_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
     val_cols = ["site_id", "year"] + [col for col in gdf.columns if col not in loc_cols]
     loc_gdf = gdf[loc_cols].copy()
     df = pd.DataFrame(gdf[val_cols]).melt(id_vars=["site_id", "year"])
@@ -1224,16 +1296,16 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
 
     # Check for missing co-ords. See
     # https://geopandas.org/en/stable/docs/user_guide/missing_empty.html
-    no_coords_gdf = loc_gdf[loc_gdf["geom"].is_empty | loc_gdf["geom"].isna()][
-        ["site_id", "name"]
-    ].sort_values("site_id")
+    no_coords_gdf = loc_gdf[
+        loc_gdf["outlet_geom"].is_empty | loc_gdf["outlet_geom"].isna()
+    ][["site_id", "name"]].sort_values("site_id")
     if len(no_coords_gdf) > 0:
         print(
-            f"{len(no_coords_gdf)} locations do not have co-ordinates in this year's data."
+            f"{len(no_coords_gdf)} locations do not have outlet co-ordinates in this year's data."
         )
         print(no_coords_gdf)
 
-    # Drop values for sites without co-ords
+    # Drop values for sites without outlet co-ords
     no_coords_ids = no_coords_gdf["site_id"].tolist()
     df = df.query("site_id not in @no_coords_ids")
     df = df[["site_id", "in_par_id", "year", "value"]]

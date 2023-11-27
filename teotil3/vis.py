@@ -1,10 +1,13 @@
 import contextily as cx
+import folium
 import geopandas as gpd
 import graphviz
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+from folium import IFrame
+from sqlalchemy import text
 
 
 def plot_network(
@@ -234,3 +237,100 @@ def choropleth_map(
         plt.savefig(plot_path, dpi=300)
 
     return ax
+
+
+def point_sources_map(year, eng, loc_type="outlet"):
+    """Create an interactive Leaflet map using Folium showing point sources for the specified 
+    year.
+
+    Args
+        year: Int. Year of interest
+        eng: Obj. Active database connection object connected to PostGIS
+        loc_type: Str. Default 'outlet'. Either 'outlet' or 'site'. Type of locations to return.
+
+    Returns
+        Folium map.
+    """
+    assert loc_type in [
+        "outlet",
+        "site",
+    ], "'loc_type' must be either 'outlet' or 'site'."
+
+    # Get point data from database
+    sql = text(
+        "SELECT * FROM teotil3.point_source_locations "
+        "WHERE year = :year "
+        f"AND {loc_type}_geom IS NOT NULL "
+        f"AND NOT ST_IsEmpty({loc_type}_geom)"
+    )
+    gdf = gpd.read_postgis(
+        sql,
+        eng,
+        geom_col=f"{loc_type}_geom",
+        params={"year": year},
+    )
+    gdf = gdf.to_crs("epsg:4326")
+    gdf["latitude"] = gdf.geometry.y
+    gdf["longitude"] = gdf.geometry.x
+
+    # Interactive map
+    m = folium.Map(location=[64, 12], zoom_start=3)
+
+    # Define a colors for categories
+    colors = {
+        "Large wastewater": "red",
+        "Small wastewater": "yellow",
+        "Industry": "blue",
+        "Aquaculture": "green",
+    }
+
+    # Create a feature group for each category
+    feature_groups = {
+        category: folium.FeatureGroup(name=category) for category in colors.keys()
+    }
+
+    # Add points to the map
+    for idx, row in gdf.iterrows():
+        lon, lat = row["longitude"], row["latitude"]
+        category = row["sector"]
+        site_id = row["site_id"]
+        name = row["name"]
+        year = row["year"]
+
+        color = colors.get(category, "gray")  # Grey is the default color
+
+        # Popup
+        html = f"""
+            <table style="width:100%">
+                <tr>
+                    <th>Site ID:</th>
+                    <td>{site_id}</td>
+                </tr>
+                <tr>
+                    <th>Name:</th>
+                    <td>{name}</td>
+                </tr>
+                <tr>
+                    <th>Year:</th>
+                    <td>{year}</td>
+                </tr>
+            </table>
+        """
+        iframe = IFrame(html, width=300, height=100)
+        popup = folium.Popup(iframe, max_width=300)
+
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=4,
+            color=color,
+            fill=True,
+            fill_color=color,
+            popup=popup,
+        ).add_to(feature_groups[category])
+
+    for feature_group in feature_groups.values():
+        feature_group.add_to(m)
+
+    folium.LayerControl().add_to(m)
+
+    return m
