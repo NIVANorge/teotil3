@@ -10,26 +10,23 @@ from sqlalchemy import text
 def geodataframe_to_geopackage(
     gdf, gpkg_path, layer, cols=None, attrib_tab_csv=None, index=False
 ):
-    """Save a geodataframe as a layer within a geopackage. If the geopackage
-    doesn't already exist, it is created. If it does exist, the layer is
-    appended. Options are included to subset/reorder columns before saving,
-    and to save the attribute table as a separate CSV if desired.
+    """Save a geodataframe as a layer within a geopackage. If the geopackage doesn't already
+    exist, it is created. If it does exist, the layer is appended. Options are included to
+    subset/reorder columns before saving, and to save the attribute table as a separate CSV if
+    desired.
 
     Args
-        gdf:            Geodataframe to save
-        gpkg_path:      Str. Path to geopackage where 'gdf' will be saved. If
-                        the geopackage does not exist, it will be created
-        layer:          Str. Name of layer to create within the geopackage. If
-                        the layer already exists, it will be overwritten.
-        cols:           List of str or None. Default None. Optionally subset
-                        or reorder columns in 'gdf' before saving. If None,
-                        all columns are saved in the original order
-        attrib_tab_csv: Str or None. Default None. Optional path to CSV where
-                        the "attribute table" should be saved. This is a table
-                        containing all the non-spatial information from the
-                        geodataframe
-        index:          Bool. Default False. Whether to save the (geo)dataframe
-                        index
+        gdf: Geodataframe to save
+        gpkg_path: Str. Path to geopackage where 'gdf' will be saved. If the geopackage does not
+            exist, it will be created
+        layer: Str. Name of layer to create within the geopackage. If the layer already exists,
+            it will be overwritten.
+        cols: List of str or None. Default None. Optionally subset or reorder columns in 'gdf'
+            before saving. If None, all columns are saved in the original order
+        attrib_tab_csv: Str or None. Default None. Optional path to CSV where the "attribute
+            table" should be saved. This is a table containing all the non-spatial information
+            from the geodataframe
+        index: Bool. Default False. Whether to save the (geo)dataframe index
 
     Returns
         None. Data are saved to disk.
@@ -58,8 +55,7 @@ def is_num(s):
         s: Str. String to test
 
     Returns
-        Bool. True if 's' can be converted to an integer, otherwise
-        False.
+        Bool. True if 's' can be converted to an integer, otherwise False.
     """
     s = str(s)
     try:
@@ -78,76 +74,67 @@ def assign_regine_hierarchy(
     land_to_vass=False,
     add_offshore=False,
 ):
-    """Determine hydrological ordering of regine catchments based on
-    catchment IDs. See
+    """Determine hydrological ordering of regine catchments based on catchment IDs. See
 
     https://www.nve.no/media/2297/regines-inndelingssystem.pdf
 
     for an overview of the regine coding scheme.
 
-    The default parameters aim to reproduce the behaviour of the original
-    model, but are not necessarily the best choices in most cases.
+    The default parameters aim to reproduce the behaviour of the original model, but are not
+    necessarily the best choices in most cases.
 
     Args
-        df:              (Geo)Dataframe of regine data
-        regine_col:      Str. Default 'regine'. Name of column in 'df'
-                         containing the regine IDs
-        regine_down_col: Str. Default 'regine_down'. Name of new column to be
-                         created to store the next down IDs
-        order_coastal:   Bool. Default True. If True, coastal catchments will
-                         be ordered hierarchically, as in the original TEOTIL
-                         model (e.g. '001.6' flows into '001.5', which flows
-                         into '001.4' etc.). In most cases this does not make
-                         sense, as the numbering of kystfelt does not reflect
-                         dominant circulation patterns. If False all kystfelt
-                         are assigned directly to the main vassdragsområde
-                         (e.g. '001.6', '001.5' and '001.4' would all flow
-                         into '001.')
-        nan_to_vass:     Bool. Default False. Whether catchments for which no
-                         downstream ID can be identified should be assigned
-                         directly to the parent vassdragsområde. In some areas -
-                         notably catchments in the east draining to Sweden - the
-                         regines are truncated mid-catchment. There is therefore
-                         no valid downstream catchment. For completeness, it is
-                         often useful to assign these catchments to the parent
-                         vassdragsområde, rather than leaving them as NaN. This
-                         behaviour can be disabled by setting 'nan_to_vass' to
-                         False. If True, a warning will be printed if NaNs are
-                         filled for any catchments other than those draining to
-                         Sweden (vassdragsområder 301 to 315)
-        land_to_vass:    Bool. Default False. Whether downstream non-coastal
-                         catchments should be linked directly to the parent
-                         vassdragsområde, or to the highest ranking kystfelt. In
-                         the original TEOTIL model, terrestrial catchments are
-                         linked to the highest-ranking coastal fields. However,
-                         these are not necessarily anywhere near the catchment
-                         outflows. An alternative is to link terrestrial outflows
-                         directly to the vassdragområder, which is simpler but
-                         may give misleading results for some kystfelt with large
-                         river mouths. If 'order_coastal' is True, 'land_to_vass'
-                         must be False. Catchments will then be arranged as for
-                         the original model. If 'order_coastal' is False, use
-                         this kwarg to control whether the algorithm links
-                         terrestrial fluxes to kystfelt, or directly to the parent
-                         vassdragområde
-        add_offshore:    Bool. Default False. Whether to add additional rows
-                         extending the hierarchy offshore to OSPAR areas (based
-                         on data hosted on GitHub)
+        df: (Geo)Dataframe of regine data
+        regine_col: Str. Default 'regine'. Name of column in 'df' containing the regine IDs
+        regine_down_col: Str. Default 'regine_down'. Name of new column to be created to store
+            the next down IDs
+        order_coastal: Bool. Default True. If True, coastal catchments will be ordered
+            hierarchically, as in the original TEOTIL model (e.g. '001.6' flows into '001.5', which
+            flows into '001.4' etc.). In most cases this does not make sense, as the numbering of
+            kystfelt does not reflect dominant circulation patterns. If False all kystfelt are
+            assigned directly to the main vassdragsområde (e.g. '001.6', '001.5' and '001.4' would
+            all flow into '001.')
+        nan_to_vass: Bool. Default False. Whether catchments for which no downstream ID can be
+            identified should be assigned directly to the parent vassdragsområde. In some areas -
+            notably catchments in the east draining to Sweden - the regines are truncated
+            mid-catchment. There is therefore no valid downstream catchment. For completeness, it is
+            often useful to assign these catchments to the parent vassdragsområde, rather than
+            leaving them as NaN. This behaviour can be disabled by setting 'nan_to_vass' to False.
+            If True, a warning will be printed if NaNs are filled for any catchments other than those
+            draining to Sweden (vassdragsområder 301 to 315)
+        land_to_vass: Bool. Default False. Whether downstream non-coastal catchments should be linked
+            directly to the parent vassdragsområde, or to the highest ranking kystfelt. In the
+            original TEOTIL model, terrestrial catchments are linked to the highest-ranking coastal
+            fields. However, these are not necessarily anywhere near the catchment outflows. An
+            alternative is to link terrestrial outflows directly to the vassdragområder, which is
+            simpler but may give misleading results for some kystfelt with large river mouths. If
+            'order_coastal' is True, 'land_to_vass' must be False. Catchments will then be arranged
+            as for the original model. If 'order_coastal' is False, use this kwarg to control whether
+            the algorithm links terrestrial fluxes to kystfelt, or directly to the parent vassdragområde
+        add_offshore: Bool. Default False. Whether to add additional rows extending the hierarchy
+            offshore to OSPAR areas (based on data hosted on GitHub)
 
     Returns
-        (Geo)Dataframe. Copy of 'df' with two new columns added. The first is
-        simply 'regine_col' cast to upper case; the second is named 'regine_down'
-        and contains the regine ID of the next catchment downstream.
+        (Geo)Dataframe. Copy of 'df' with two new columns added. The first is simply 'regine_col'
+        cast to upper case; the second is named 'regine_down' and contains the regine ID of the next
+        catchment downstream.
+
+    Raises
+        ValeError if 'regine_col' not in 'df'.
+        ValueError if 'order_coastal', 'nan_to_vass' and 'add_offshore' are not Boolean.
+        ValueError of 'order_coastal' is True AND 'land_to_vass' is True
+        ValueError if if 'df' contains invalid column names.
     """
-    assert regine_col in df.columns, f"Column '{regine_col}' not found in 'df'."
+    if regine_col not in df.columns:
+        raise ValueError(f"Column '{regine_col}' not found in 'df'.")
     for kwarg in [order_coastal, nan_to_vass, add_offshore]:
-        assert isinstance(
-            kwarg, bool
-        ), "Boolean keyword argument must be either True or False."
+        if not isinstance(kwarg, bool):
+            raise ValueError("Boolean keyword argument must be either True or False.")
     if order_coastal:
-        assert (
-            land_to_vass is False
-        ), "'land_to_vass' must be False when 'order_coastal' is True."
+        if land_to_vass:
+            raise ValueError(
+                "'land_to_vass' must be False when 'order_coastal' is True."
+            )
     for col in ["vassomx", "codex", regine_down_col]:
         if col in df.columns:
             raise ValueError(
@@ -265,31 +252,33 @@ def get_regine_geodataframe(engine, year):
     """Get the regine catchment polygons and basic attributes from PostGIS as a geodataframe.
 
     Args
-        engine:      SQL-Alchemy 'engine' object already connected to the 'teotil3'
-                     database
-        year:        Int. Year of interest
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        year: Int. Year of interest
 
     Returns
         Geodataframe.
+
+    Raises
+        ValueError if 'year' is not an integer.
     """
-    assert isinstance(year, int), "'year' must be an integer."
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer.")
 
     sql = text("SELECT * FROM teotil3.regines ORDER BY regine")
     gdf = gpd.read_postgis(sql, engine)
 
-    # Get the year to use for administrative boundaries. Data are poor before 2014
-    if year < 2015:
-        admin_year = 2014
-    else:
-        admin_year = year
+    # Get the year to use for administrative boundaries
+    admin_year = 2014 if year < 2015 else year
 
     # Delete irrelevant columns and tidy
-    del gdf["upstr_a_km2"]
-    for col in gdf.columns:
-        if col.startswith("fylnr") or col.startswith("komnr"):
-            if not col.endswith(str(admin_year)):
-                del gdf[col]
-
+    gdf.drop(columns=["upstr_a_km2"], inplace=True)
+    cols_to_keep = [
+        col
+        for col in gdf.columns
+        if (col.startswith("fylnr") or col.startswith("komnr"))
+        and col.endswith(str(admin_year))
+    ]
+    gdf = gdf[cols_to_keep + ["geom"]]
     gdf.rename(
         {
             f"fylnr_{admin_year}": "fylnr",
@@ -305,28 +294,32 @@ def get_regine_geodataframe(engine, year):
 
 
 def get_annual_vassdrag_flow_factors(data_supply_year, year, engine):
-    """Calculate flow factors for each vassdragområde based on modelled output from HBV.
-    For each vassdragsområde, a correction factor is calculated as
+    """Calculate flow factors for each vassdragområde based on modelled output from HBV. For each
+    vassdragsområde, a correction factor is calculated as
 
         mean_flow_year / mean_flow_1991-2020
 
-    These factors can then be multipled by the regine-level averages for 1991-2020 from
-    NVE's new runoff dataset to estimate regine-level annual runoff and flow.
+    These factors can then be multipled by the regine-level averages for 1991-2020 from NVE's
+    new runoff dataset to estimate regine-level annual runoff and flow.
 
     Args
-        data_supply_year: Int. Year of data delivery from NVE. NVE supplies complete data
-                          from 1990 to present each year. The historic values change slightly
-                          as NVE update their models and input data. This argument specifies
-                          the NVE dataset to be used
-        year:             Int. Year of interest
-        engine:           SQL-Alchemy 'engine' object already connected to the 'teotil3'
-                          database
+        data_supply_year: Int. Year of data delivery from NVE. NVE supplies complete data from
+            1990 to present each year. The historic values change slightly as NVE update their
+            models and input data. This argument specifies the NVE dataset to be used
+        year: Int. Year of interest
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
 
     Returns
         Dataframe
+
+    Raises
+        ValueError if 'year' or 'data_supply_year' are not integers.
+        AssertionError if data are missing for some vassdragsområder.
     """
-    assert isinstance(data_supply_year, int), "'data_supply_year' must be an integer."
-    assert isinstance(year, int), "'year' must be an integer."
+    if not isinstance(data_supply_year, int):
+        raise ValueError("'data_supply_year' must be an integer.")
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer.")
 
     sql = text(
         """
@@ -360,30 +353,33 @@ def get_annual_vassdrag_flow_factors(data_supply_year, year, engine):
 
 
 def rescale_annual_flows(reg_gdf, data_supply_year, year, engine):
-    """Rescales flows for each regine based on annual HBV data from NVE. 'reg_gdf' must
-    include columns named 'runoff_mm/yr' and 'q_cat_m3/s', each containing the average
-    mean values for the period from 1991 to 2020 from NVE. It must also include a column
-    named 'vassom' defining the vassdragsområder.
+    """Rescales flows for each regine based on annual HBV data from NVE. 'reg_gdf' must include
+    columns named 'runoff_mm/yr' and 'q_cat_m3/s', each containing the average mean values for
+    the period from 1991 to 2020 from NVE. It must also include a column named 'vassom' defining
+    the vassdragsområder.
 
     Args
-        reg_gdf:          Geodataframe. Regine catchments with long-term mean flow values
-        data_supply_year: Int. Year of data delivery from NVE. NVE supplies complete data
-                          from 1990 to present each year. The historic values change slightly
-                          as NVE update their models and input data. This argument specifies
-                          the NVE dataset to be used
-        year:             Int. Year of interest
-        engine:           SQL-Alchemy 'engine' object already connected to the 'teotil3'
-                          database
+        reg_gdf: Geodataframe. Regine catchments with long-term mean flow values
+        data_supply_year: Int. Year of data delivery from NVE. NVE supplies complete data from
+            1990 to present each year. The historic values change slightly as NVE update their
+            models and input data. This argument specifies the NVE dataset to be used
+        year: Int. Year of interest
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+
     Returns
-        Copy of 'reg_gdf' with flow-related columns modified to reflect the current year.
-        columns modified are ['runoff_mm/yr', 'q_cat_m3/s']
+        Copy of 'reg_gdf' with flow-related columns modified to reflect the current year. Columns
+        modified are ['runoff_mm/yr', 'q_cat_m3/s']
+
+    Raises
+        ValueError if 'year' or 'data_supply_year' are not integers.
     """
-    assert isinstance(data_supply_year, int), "'data_supply_year' must be an integer."
-    assert isinstance(year, int), "'year' must be an integer."
+    if not isinstance(data_supply_year, int):
+        raise ValueError("'data_supply_year' must be an integer.")
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer.")
 
     reg_gdf = reg_gdf.copy()
     q_fac_df = get_annual_vassdrag_flow_factors(data_supply_year, year, engine)
-
     reg_gdf = pd.merge(reg_gdf, q_fac_df, how="left", on="vassom")
     for col in ["runoff_mm/yr", "q_cat_m3/s"]:
         reg_gdf[col] = reg_gdf[col] * reg_gdf["flow_factor"]
@@ -399,62 +395,69 @@ def get_retention_transmission_factors(year, keep="trans"):
     """Read regine-level retention and transmission coefficients.
 
     Args
-        year:        Int. Year of interest
-        keep:        Str. Default 'trans'. One of ['trans', 'ret', 'both']. Whether to
-                     return only transmission factors, only retention factors, or both
+        year: Int. Year of interest
+        keep: Str. Default 'trans'. One of ['trans', 'ret', 'both']. Whether to return only
+            transmission factors, only retention factors, or both
 
     Returns
         Dataframe.
+
+    Raises
+        ValueError if 'year' is not an integer.
+        ValueError if 'keep' is not in ['trans', 'ret', 'both'].
     """
-    assert isinstance(year, int), "'year' must be an integer."
-    assert keep in [
-        "trans",
-        "ret",
-        "both",
-    ], "'keep' must be one of ['trans', 'ret', 'both']."
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer.")
+    if keep not in ["trans", "ret", "both"]:
+        raise ValueError("'keep' must be one of ['trans', 'ret', 'both'].")
 
     url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/regine_retention_transmission_10m_dem.csv"
     df = pd.read_csv(url)
 
-    if keep == "trans":
-        cols = ["regine"] + [col for col in df.columns if col.startswith("trans_")]
+    if keep != "both":
+        factor_type = "trans_" if keep == "trans" else "ret_"
+        cols = ["regine"] + [col for col in df.columns if col.startswith(factor_type)]
         df = df[cols]
-    elif keep == "ret":
-        cols = ["regine"] + [col for col in df.columns if col.startswith("ret_")]
-        df = df[cols]
-    else:
-        pass
 
     return df
 
 
 def get_background_coefficients(year):
-    """Read the static, spatially variable and spatio-temporally variable background
-    coefficents and join to a single dataframe.
+    """Read the static, spatially variable and spatio-temporally variable background coefficents
+    and join to a single dataframe.
 
     Args
-        year:        Int. Year of interest
+        year: Int. Year of interest
 
     Returns
         Dataframe.
+
+    Raises
+        ValueError if 'year' is not an integer.
     """
-    assert isinstance(year, int), "'year' must be an integer."
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer.")
+
+    # Define URLs for background coefficients
+    base_url = "https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/"
+    urls = {
+        "static": f"{base_url}spatially_static_background_coefficients.csv",
+        "spatial": f"{base_url}spatially_variable_background_coefficients.csv",
+        "spat_temp": f"{base_url}spatiotemporally_variable_background_coefficients.csv",
+    }
 
     # Read background coefficients
-    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/spatially_static_background_coefficients.csv"
-    static_df = pd.read_csv(url)
+    static_df = pd.read_csv(urls["static"])
+    spatial_df = pd.read_csv(urls["spatial"])
+    spat_temp_df = pd.read_csv(urls["spat_temp"])
 
-    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/spatially_variable_background_coefficients.csv"
-    spatial_df = pd.read_csv(url)
-
-    url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/spatiotemporally_variable_background_coefficients.csv"
-    spat_temp_df = pd.read_csv(url)
+    # Rename column for the specified year
     spat_temp_df.rename(
-        {f"{year}_lake_din_kg/km2": "lake_din_kg/km2"}, axis="columns", inplace=True
+        columns={f"{year}_lake_din_kg/km2": "lake_din_kg/km2"}, inplace=True
     )
     spat_temp_df = spat_temp_df[["regine", "lake_din_kg/km2"]]
 
-    # Join
+    # Merge dataframes
     df = pd.merge(spatial_df, spat_temp_df, on="regine", how="inner")
     for idx, row in static_df.iterrows():
         df[row["variable"]] = row["value"]
@@ -472,12 +475,15 @@ def calculate_background_inputs(reg_gdf):
     Returns
         (Geo)Dataframe. Copy of 'reg_gdf' with new columns representing inputs for each
         parameter added and the background coefficients removed.
+
+    Raises
+        ValueError if units cannot be identified correctly from column names in 'reg_gdf'.
     """
     reg_gdf = reg_gdf.copy()
     reg_gdf["q_sp_l/km2"] = reg_gdf["runoff_mm/yr"] * 1e6
 
-    # Calculations for "concentration-based" pars
-    col_list = [
+    # Define the parameters for concentration-based and area-based calculations
+    concentration_based_pars = [
         "wood_totn_µg/l",
         "wood_din_µg/l",
         "wood_ton_µg/l",
@@ -501,7 +507,15 @@ def calculate_background_inputs(reg_gdf):
         "urban_toc_µg/l",
         "urban_ss_mg/l",
     ]
-    for col in col_list:
+    area_based_pars = [
+        "lake_din_kg/km2",
+        "wood_ss_kg/km2",
+        "upland_ss_kg/km2",
+        "glacier_ss_kg/km2",
+    ]
+
+    # Perform calculations for concentration-based parameters
+    for col in concentration_based_pars:
         lc_class, par, unit = col.split("_")
         if unit[0] == "m":
             unit_fac = 1e6
@@ -519,13 +533,7 @@ def calculate_background_inputs(reg_gdf):
         del reg_gdf[col]
     del reg_gdf["q_sp_l/km2"]
 
-    # Calculations for "area-based" pars
-    col_list = [
-        "lake_din_kg/km2",
-        "wood_ss_kg/km2",
-        "upland_ss_kg/km2",
-        "glacier_ss_kg/km2",
-    ]
+    # Perform calculations for area-based parameters
     for col in col_list:
         lc_class, par, unit = col.split("_")
         if unit[0] == "k":
@@ -555,20 +563,18 @@ def make_input_file(
     the database.
 
     Args
-        year:          Int. Year of interest
+        year: Int. Year of interest
         nve_data_year: Int. Specifies the discharge dataset to use from NVE
-        engine:        SQL-Alchemy 'engine' object already connected to the 'teotil3'
-                       database
-        out_csv_fold:  None or Str. Default None. Path to folder where output CSV will be
-                       created
-        nan_to_vass:   Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
-                       to determine hydrological connectivity
-        add_offshore:  Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
-                       to determine hydrological connectivity
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        out_csv_fold: None or Str. Default None. Path to folder where output CSV will be created
+        nan_to_vass: Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
+            to determine hydrological connectivity
+        add_offshore: Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
+            to determine hydrological connectivity
         order_coastal: Bool. Default False. Additional kwarg passed to 'assign_regine_hierarchy'
-                       to determine hydrological connectivity
-        land_to_vass:  Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
-                       to determine hydrological connectivity
+            to determine hydrological connectivity
+        land_to_vass: Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
+            to determine hydrological connectivity
 
     Returns
         Dataframe. The CSV is written to the specified folder.
@@ -655,21 +661,25 @@ def get_annual_spredt_data(
         "toc_kg",
     ],
 ):
-    """Get annual 'spredt' data for each kommune. 'spredt' comprises wastewater treatment discharges
-    from sources not connected to the main sewerage network (septic tanks etc.) or from 'små anlegg'
-    sites that are too small (< 50 p.e.) to be reported individually.
+    """Get annual 'spredt' data for each kommune. 'spredt' comprises wastewater treatment
+    discharges from sources not connected to the main sewerage network (septic tanks etc.) or
+    from 'små anlegg' sites that are too small (< 50 p.e.) to be reported individually.
 
     Args
-        engine:   SQL-Alchemy 'engine' object already connected to the 'teotil3' database
-        year:     Int. Year of interest
-        par_list: List of parameters to consider. If None, returns data for all parameters
-                  in the database. The default is the basic set of parameters considered
-                  by TEOTIL3.
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        year: Int. Year of interest
+        par_list: List of parameters to consider. If None, returns data for all parameters in
+            the database. The default is the basic set of parameters considered by TEOTIL3.
 
     Returns
         Dataframe of spredt data
+
+    Raises
+        ValueError if 'year' is not an integer.
+        AssertionError if the spredt dataframe contains missing values.
     """
-    assert isinstance(year, int), "'year' must be an integer."
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer.")
 
     sql = text(
         """
@@ -726,24 +736,30 @@ def get_annual_point_data(
     """Get annual data for aquaculture, industry or wasterwater treatment from the database.
 
     Args
-        year:     Int. Year of interest
-        sector:   Str. One of ['aquaculture', 'industry', 'large wastewater',
-                  'small wastewater']
-        engine:   SQL-Alchemy 'engine' object already connected to the 'teotil3' database
-        par_list: List of parameters to consider. If None, returns data for all parameters
-                  in the database. The default is the basic set of parameters considered
-                  by TEOTIL3.
+        year: Int. Year of interest
+        sector: Str. One of ['aquaculture', 'industry', 'large wastewater', 'small wastewater']
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        par_list: List of parameters to consider. If None, returns data for all parameters in
+            the database. The default is the basic set of parameters considered by TEOTIL3.
 
     Returns
         Dataframe of point data assigned to regines.
+
+    Raises
+        ValueError if 'sector' is not one of
+            ['aquaculture', 'industry', 'large wastewater', 'small wastewater']
     """
-    sector = sector.lower()
-    assert sector in [
+    valid_sectors = [
         "aquaculture",
         "industry",
         "large wastewater",
         "small wastewater",
-    ], "'sector' must be one of ['aquaculture', 'industry', 'large wastewater', 'small wastewater']."
+    ]
+    sector = sector.lower()
+    if sector not in valid_sectors:
+        raise ValueError(
+            "'sector' must be one of ['aquaculture', 'industry', 'large wastewater', 'small wastewater']."
+        )
 
     sql = text(
         """
@@ -759,7 +775,7 @@ def get_annual_point_data(
                 b.regine
             FROM teotil3.point_source_locations a,
                 teotil3.regines b
-            WHERE ST_WITHIN(a.geom, b.geom)
+            WHERE ST_WITHIN(a.outlet_geom, b.geom)
             ) d
         WHERE a.in_par_id = b.in_par_id
             AND b.out_par_id = c.out_par_id
@@ -809,24 +825,22 @@ def assign_spredt_to_regines(
         "toc_kg",
     ],
 ):
-    """Kommune level totals for spredt in 'spr_df' area are assigned to regines in 'reg_gdf'.
-    Spredt is distributed evenly over all agricultural land in each kommune (if agricultural
-    land exists) and otherwise it is simply distributed evenly over all land.
+    """Kommune level totals for spredt in 'spr_df' area are assigned to regines in 'reg_gdf'. Spredt
+    is distributed evenly over all agricultural land in each kommune (if agricultural land
+    exists) and otherwise it is simply distributed evenly over all land.
 
     Args
-        reg_gdf:  Geodataframe of regine data.
-        spr_df:   dataframe of kommune level spredt data
-        par_list: List of parameters to consider. If None, returns data for all parameters
-                  in the database. The default is the basic set of parameters considered
-                  by TEOTIL3.
+        reg_gdf: Geodataframe of regine data.
+        spr_df: Dataframe of kommune level spredt data
+        par_list: List of parameters to consider. If None, returns data for all parameters in
+            the database. The default is the basic set of parameters considered by TEOTIL3.
 
     Returns
         Geodataframe. New columns are added to 'reg_gdf' indicting the spredt inputs to each
         regine.
     """
     kom_df = reg_gdf[["komnr", "a_cat_land_km2", "a_agri_km2"]].copy()
-    kom_df = kom_df.groupby("komnr").sum()
-    kom_df.reset_index(inplace=True)
+    kom_df = kom_df.groupby("komnr").sum().reset_index()
     kom_df.columns = ["komnr", "a_kom_km2", "a_agri_kom_km2"]
 
     if spr_df is not None:
