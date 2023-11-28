@@ -616,7 +616,7 @@ def estimate_aquaculture_nutrient_inputs(
             raise TypeError("'cu_tonnes' must be a number.")
 
     # Read coefficients for aquaculture
-    coeff_df = read_coefficients()
+    coeff_df = read_aquaculture_coefficients()
 
     # Fill NaN with 0 where necessary
     cols = [
@@ -987,7 +987,7 @@ def get_annual_copper_usage_aquaculture(year):
         raise TypeError("'year' must be an integer.")
     url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/aquaculture_annual_copper_usage.csv"
     df = pd.read_csv(url, index_col=0)
-    cu_tonnes = df.loc[year]["tot_cu_tonnes"]
+    cu_tonnes = float(df.loc[year]["tot_cu_tonnes"])
 
     return cu_tonnes
 
@@ -1577,7 +1577,7 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     df = df.groupby("komnr").sum(numeric_only=True).reset_index()
 
     # Tidy
-    df = restructure_data(df)
+    df = restructure_small_wastewater_data(df)
 
     # Estimate nutrient inputs
     df = subdivide_point_source_n_and_p(df, "Small wastewater", "TOTN_kg", "TOTP_kg")
