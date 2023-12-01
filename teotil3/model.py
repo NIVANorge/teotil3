@@ -11,7 +11,7 @@ def build_graph(df, id_col="regine", next_down_col="regine_down"):
 
     Args
         df: Dataframe. Adjacency matrix
-        id_col: Str. Default 'regine'. Column in 'df' with unique IDs for catchments 
+        id_col: Str. Default 'regine'. Column in 'df' with unique IDs for catchments
         next_down_col: Str. Default 'regine_down'. Column in 'df' with ID of catchment immediately
             downstream
 
@@ -31,17 +31,17 @@ def build_graph(df, id_col="regine", next_down_col="regine_down"):
     return g
 
 
-def validate_input(data, req_cols, acc_cols):
+def validate_input(data, id_col, next_down_col):
     """
     Validate the input data for the TEOTIL3 model.
 
     Args
         data: DataFrame or str. The input data for the model.
-        req_cols: List[str]. The required columns in the input data.
-        acc_cols: List[str]. The columns to be accumulated in the model.
+        id_col: Str. The column in 'df' with unique IDs for catchments.
+        next_down_col: Str. The column in 'df' with ID of catchment immediately downstream.
 
     Returns
-        DataFrame. The validated input data.
+        Tuple of input data (input_dataframe, cols_to_accumulate).
 
     Raises
         ValueError: If the input data is not a DataFrame or a raw string.
@@ -56,6 +56,11 @@ def validate_input(data, req_cols, acc_cols):
     else:
         raise ValueError('"data" must be either a "raw" string or a Pandas dataframe.')
 
+    req_cols = [id_col, next_down_col, "a_cat_land_km2", "runoff_mm/yr", "q_cat_m3/s"]
+    acc_cols = [
+        i for i in df.columns if (i not in req_cols) and (i.split("_")[0] != "trans")
+    ]
+
     for col in req_cols:
         if col not in df.columns:
             raise ValueError(f"'data' must contain a column named '{col}'.")
@@ -69,7 +74,7 @@ def validate_input(data, req_cols, acc_cols):
                 f"Column 'trans_{par}' contains values outside of range [0, 1]"
             )
 
-    return df
+    return (df, acc_cols)
 
 
 def run_model(
@@ -88,13 +93,7 @@ def run_model(
     Returns
         DiGraph. The networkX graph object with results added as node attributes.
     """
-    req_cols = [id_col, next_down_col, "a_cat_land_km2", "runoff_mm/yr", "q_cat_m3/s"]
-    acc_cols = [
-        i for i in data.columns if (i not in req_cols) and (i.split("_")[0] != "trans")
-    ]
-
-    df = validate_input(data, req_cols, acc_cols)
-
+    df, acc_cols = validate_input(data, id_col, next_down_col)
     g = build_graph(df, id_col=id_col, next_down_col=next_down_col)
     g = accumulate_loads(g, acc_cols)
     if totals_from_subfracs:
@@ -106,18 +105,18 @@ def run_model(
 def accumulate_loads(g, acc_cols):
     """
     Perform accumulation over a TEOTIL3 hydrological network. Usually called by run_model(). Local
-    inputs for the sources and parameters specified by 'acc_cols' are accumulated downstream, 
+    inputs for the sources and parameters specified by 'acc_cols' are accumulated downstream,
     allowing for parameter-specific retention.
 
     Args
-        g: Pre-built NetworkX graph. Must be a directed tree/forest and each node must have 
+        g: Pre-built NetworkX graph. Must be a directed tree/forest and each node must have
             properties 'local' (internal load) and 'accum' (empty dict).
         acc_cols: List of str. Columns to accumulate (in addition to the standard/required ones).
-            Must be named '{source}_{par}_{unit}' - see docstring for run_model() for further 
+            Must be named '{source}_{par}_{unit}' - see docstring for run_model() for further
             details
 
     Returns
-        NetworkX graph object. g is modifed by adding the property 'accum_XXX' to each node. This 
+        NetworkX graph object. g is modifed by adding the property 'accum_XXX' to each node. This
         is the total amount of substance flowing out of the node.
 
     Raises
@@ -165,7 +164,7 @@ def accumulate_loads(g, acc_cols):
 
 def sum_subfractions(g, acc_cols):
     """
-    Checks whether nodes in 'g' contain results for ('din_kg' or 'ton_kg'), or ('tdp_kg' or 
+    Checks whether nodes in 'g' contain results for ('din_kg' or 'ton_kg'), or ('tdp_kg' or
     'tpp_kg'). If they do, new 'local' and 'accum' attributes are added by summing the subfractions
     for each parameter from each source.
 
@@ -217,7 +216,7 @@ def model_to_dataframe(g, id_col="regine", next_down_col="regine_down", out_path
     Args
         g: NetworkX graph object returned by teo.model.run_model()
         id_col: Str. Default 'regine'. Column in 'df' with unique IDs for catchments
-        next_down_col: Str. Default 'regine_down'. Column in 'df' with ID of catchment immediately 
+        next_down_col: Str. Default 'regine_down'. Column in 'df' with ID of catchment immediately
             downstream
         out_path: Raw Str. Optional. CSV path to which df will be saved
 

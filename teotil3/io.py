@@ -271,14 +271,11 @@ def get_regine_geodataframe(engine, year):
     admin_year = 2014 if year < 2015 else year
 
     # Delete irrelevant columns and tidy
-    gdf.drop(columns=["upstr_a_km2"], inplace=True)
-    cols_to_keep = [
-        col
-        for col in gdf.columns
-        if (col.startswith("fylnr") or col.startswith("komnr"))
-        and col.endswith(str(admin_year))
-    ]
-    gdf = gdf[cols_to_keep + ["geom"]]
+    del gdf["upstr_a_km2"]
+    for col in gdf.columns:
+        if col.startswith("fylnr") or col.startswith("komnr"):
+            if not col.endswith(str(admin_year)):
+                del gdf[col]                
     gdf.rename(
         {
             f"fylnr_{admin_year}": "fylnr",
@@ -534,7 +531,7 @@ def calculate_background_inputs(reg_gdf):
     del reg_gdf["q_sp_l/km2"]
 
     # Perform calculations for area-based parameters
-    for col in col_list:
+    for col in area_based_pars:
         lc_class, par, unit = col.split("_")
         if unit[0] == "k":
             unit_fac = 1
