@@ -275,7 +275,7 @@ def get_regine_geodataframe(engine, year):
     for col in gdf.columns:
         if col.startswith("fylnr") or col.startswith("komnr"):
             if not col.endswith(str(admin_year)):
-                del gdf[col]                
+                del gdf[col]
     gdf.rename(
         {
             f"fylnr_{admin_year}": "fylnr",
@@ -803,7 +803,8 @@ def get_annual_point_data(
                 for col in par_list
                 if f"{sector.replace(' ', '-')}_{col}" in df.columns
             ]
-            df = df[cols].round(1)
+            df = df[cols].copy()
+        df = df.round(1)
         df.reset_index(inplace=True)
 
         return df
@@ -873,3 +874,91 @@ def assign_spredt_to_regines(
         reg_gdf[f"spredt_{par}"] = reg_gdf[f"spredt_{par}"].fillna(value=0).round(1)
 
     return reg_gdf
+
+
+def get_point_time_series(
+    site_list,
+    st_yr,
+    end_yr,
+    eng,
+    par_list=[
+        "totn_kg",
+        "din_kg",
+        "ton_kg",
+        "totp_kg",
+        "tdp_kg",
+        "tpp_kg",
+        "toc_kg",
+        "ss_kg",
+    ],
+):
+    """Get annual discharge time series for a list of sites.
+
+    Args
+        site_list: List of str. List of site IDs ('anleggsnr') of interest
+        st_yr: Int. Start year of interest
+        end_yr: Int. End year of interest
+        eng: Obj. Active database engine connected to the TEOTIL3 database
+        par_list. List of str or None. List of parameters to consider. If None, returns data for
+            all parameters in the database. The default is the basic set of parameters considered
+            by TEOTIL3.
+
+    Returns
+        Geodataframe of point data, or None if not data are available.
+
+    Raises
+        TypeError if 'site_list' or 'par_list' are not lists.
+        TypeError if 'st_yr' and 'end_yr' are not integers.
+    """
+    if not isinstance(site_list, list):
+        raise TypeError("'site_list' must be a list.")
+    if not isinstance(par_list, list):
+        raise TypeError("'par_list' must be a list.")
+    if not isinstance(st_yr, int):
+        raise TypeError("'st_yr' must be an integer.")
+    if not isinstance(end_yr, int):
+        raise TypeError("'end_yr' must be an integer.")
+
+    # Get point data
+    sql = text(
+        "SELECT a.site_id, "
+        "  a.name, "
+        "  a.sector, "
+        "  a.type, "
+        "  a.year, "
+        "  a.outlet_geom AS geometry, "
+        "  CONCAT_WS('_', d.name, d.unit) AS par_name, "
+        "  (b.value * c.factor) AS value "
+        "FROM teotil3.point_source_locations a, "
+        "  teotil3.point_source_values b, "
+        "  teotil3.input_output_param_conversion c, "
+        "  teotil3.output_param_definitions d "
+        "WHERE b.in_par_id = c.in_par_id "
+        "  AND c.out_par_id = d.out_par_id "
+        "  AND a.site_id = b.site_id "
+        "  AND a.year >= :st_yr "
+        "  AND a.year <= :end_yr "
+        "  AND a.year = b.year "
+        "  AND a.site_id IN :site_list"  # Modified to use IN clause
+    )
+    gdf = gpd.read_postgis(
+        sql,
+        eng,
+        geom_col="geometry",
+        params={"st_yr": st_yr, "end_yr": end_yr, "site_list": tuple(site_list)},
+    )
+
+    if len(gdf) == 0:
+        print(f"No data for selected sites within the period of interest.")
+        return None
+    else:
+        id_cols = ["site_id", "name", "sector", "type", "year", "geometry"]
+        gdf = gdf.pivot(index=id_cols, columns="par_name", values="value").copy()
+        if par_list:
+            cols = [col for col in gdf.columns if col.lower() in par_list]
+            gdf = gdf[cols].copy()
+        gdf = gdf.round(1)
+        gdf.reset_index(inplace=True)
+        gdf = gdf.sort_values(["site_id", "year"])
+
+        return gdf
