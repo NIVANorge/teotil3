@@ -346,6 +346,10 @@ def get_annual_vassdrag_flow_factors(data_supply_year, year, engine):
 
     assert len(df) == 261, "Data are missing for some vassdragsområder."
 
+    # NVE data for vassom 183 are very strange. For now, assign flow_factor=1
+    # See issue here
+    df.loc[df['vassom'] == '183', 'flow_factor'] = 1
+
     return df
 
 
@@ -555,6 +559,7 @@ def make_input_file(
     add_offshore=True,
     order_coastal=False,
     land_to_vass=True,
+    agri_loss_model="annual",
 ):
     """Builds an input file for the specified year. All the required data must be uploaded to
     the database.
@@ -572,10 +577,40 @@ def make_input_file(
             to determine hydrological connectivity
         land_to_vass: Bool. Default True. Additional kwarg passed to 'assign_regine_hierarchy'
             to determine hydrological connectivity
+        agri_loss_model: Str. Default 'annual'. Either 'annual' or 'risk'. NIBIO's models estimate
+            losses in two modes: 'annual' and 'risk'. 'annual' attempts to account for weather
+            variability from year to year and should give the most accurate simulations of observed
+            losses; 'risk' assumes a typical fixed year for weather and hydrology and is useful for
+            exploring effects of changing agricultural management. 'annual' is usually the most
+            appropriate choice for TEOTIL.
 
     Returns
         Dataframe. The CSV is written to the specified folder.
+
+    Raises
+        ValueError: If 'year' or 'nve_data_year' is not an integer.
+        ValueError: If 'out_csv_fold' is not None or a string.
+        ValueError: If 'nan_to_vass', 'add_offshore', 'order_coastal' or 'land_to_vass' are not
+            boolean.
+        ValueError: If 'agri_loss_model' is not 'annual' or 'risk'.
     """
+    if not isinstance(year, int):
+        raise ValueError("'year' must be an integer")
+    if not isinstance(nve_data_year, int):
+        raise ValueError("'nve_data_year' must be an integer")
+    if out_csv_fold is not None and not isinstance(out_csv_fold, str):
+        raise ValueError("'out_csv_fold' must be a directory path.")
+    if not isinstance(nan_to_vass, bool):
+        raise ValueError("'nan_to_vass' must be a boolean")
+    if not isinstance(add_offshore, bool):
+        raise ValueError("'add_offshore' must be a boolean")
+    if not isinstance(order_coastal, bool):
+        raise ValueError("'order_coastal' must be a boolean")
+    if not isinstance(land_to_vass, bool):
+        raise ValueError("'land_to_vass' must be a boolean")
+    if agri_loss_model not in ["annual", "risk"]:
+        raise ValueError("'agri_loss_model' must be either 'annual' or 'risk'")
+
     # Get basic datasets from database
     reg_gdf = get_regine_geodataframe(engine, year)
     ret_df = get_retention_transmission_factors(year, keep="trans")
@@ -584,6 +619,7 @@ def make_input_file(
     aqu_df = get_annual_point_data(engine, year, "aquaculture")
     ind_df = get_annual_point_data(engine, year, "industry")
     ww_df = get_annual_point_data(engine, year, "large wastewater")
+    agri_df = get_annual_agriculture_data(engine, year, loss_type=agri_loss_model)
 
     # Rescale long-term flow averages to year of interest
     reg_gdf = rescale_annual_flows(reg_gdf, nve_data_year, year, engine)
@@ -604,6 +640,12 @@ def make_input_file(
     for df in df_list:
         df.set_index("regine", inplace=True)
     reg_gdf = pd.concat(df_list, axis="columns").reset_index()
+
+    # Join agricultural inputs
+    reg_gdf = pd.merge(reg_gdf, agri_df, how="left", on="regine")
+    for col in agri_df.columns:
+        if col != "regine":
+            reg_gdf[col].fillna(0, inplace=True)
 
     # Determine hydrological connectivity
     reg_gdf = assign_regine_hierarchy(
@@ -962,3 +1004,49 @@ def get_point_time_series(
         gdf = gdf.sort_values(["site_id", "year"])
 
         return gdf
+
+
+def get_annual_agriculture_data(eng, year, loss_type="annual"):
+    """Get annual agriculture data for regines based on modelling undertaken by NIBIO.
+
+    Args
+        eng: Obj. Active SQL-Alchemy 'engine' object connected to the 'teotil3' database
+        year: Int. Year of interest
+        loss_type: Str. Default 'annual'. Either 'annual' or 'risk'. NIBIO's models estimate losses
+            in two modes: 'annual' and 'risk'. 'annual' attempts to account for weather variability
+            from year to year and should give the most accurate simulations of observed losses;
+            'risk' assumes a typical fixed year for weather and hydrology and is useful for
+            exploring effects of changing agricultural management. 'annual' is usually the most
+            appropriate choice for TEOTIL.
+
+    Returns
+        Dataframe of annual agricultural inputs.
+
+    Raises
+        TypeError if 'year' is not an integer.
+        ValueError if 'loss_type' is not in ['annual', 'risk'].
+    """
+    if not isinstance(year, int):
+        raise TypeError("'year' must be an integer.")
+    if loss_type not in ("annual", "risk"):
+        raise ValueError("'loss_type' must be either 'annual' or 'risk'.")
+
+    sql = text(
+        "SELECT * FROM teotil3.agri_inputs "
+        "WHERE year = :year "
+        "AND loss_type = :loss_type"
+    )
+    df = pd.read_sql(sql, eng, params={"year": year, "loss_type": loss_type})
+    df.drop(columns=["loss_type", "year"], inplace=True)
+
+    if len(df) == 0:
+        print(f"    No agriculture data for {year}.")
+
+        return None
+
+    else:
+        df.columns = [
+            col.replace("agriculture_background", "agriculture-background")
+            for col in df.columns
+        ]
+        return df
