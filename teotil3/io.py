@@ -348,7 +348,7 @@ def get_annual_vassdrag_flow_factors(data_supply_year, year, engine):
 
     # NVE data for vassom 183 are very strange. For now, assign flow_factor=1
     # See issue here
-    df.loc[df['vassom'] == '183', 'flow_factor'] = 1
+    df.loc[df["vassom"] == "183", "flow_factor"] = 1
 
     return df
 
@@ -392,13 +392,15 @@ def rescale_annual_flows(reg_gdf, data_supply_year, year, engine):
     return reg_gdf
 
 
-def get_retention_transmission_factors(year, keep="trans"):
+def get_retention_transmission_factors(year, keep="trans", csv_path=None):
     """Read regine-level retention and transmission coefficients.
 
     Args
         year: Int. Year of interest
         keep: Str. Default 'trans'. One of ['trans', 'ret', 'both']. Whether to return only
             transmission factors, only retention factors, or both
+        csv_path: Str or None. Default None. Path to CSV file containing the retention and
+            transmission factors. If None, the latest data will be read from GitHub
 
     Returns
         Dataframe.
@@ -413,6 +415,8 @@ def get_retention_transmission_factors(year, keep="trans"):
         raise ValueError("'keep' must be one of ['trans', 'ret', 'both'].")
 
     url = r"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/regine_retention_transmission_10m_dem.csv"
+    if csv_path:
+        url = csv_path
     df = pd.read_csv(url)
 
     if keep != "both":

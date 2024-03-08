@@ -1,3 +1,3 @@
 # TEOTIL3 data
 
-Core datasets for TEOTIL3.
+Core datasets used for developing for TEOTIL3.

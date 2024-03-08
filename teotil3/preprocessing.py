@@ -1,3 +1,4 @@
+import itertools
 import os
 
 import geopandas as gpd
@@ -68,7 +69,7 @@ def summarise_regine_hydrology(reg_gdf, ro_grid_path, all_touched=True):
         all_touched: Bool. Default True. Defines the rasterisation strategy. See
             https://pythonhosted.org/rasterstats/manual.html#rasterization-strategy
 
-    Returns:
+    Returns
         Geodataframe. Copy of the original geodataframe with columns 'runoff_mm/yr' and
         'q_cat_m3/s' added.
     """
@@ -115,13 +116,13 @@ def summarise_regine_hydrology(reg_gdf, ro_grid_path, all_touched=True):
 def assign_regines_to_administrative_units(reg_gdf, admin_gpkg, admin_year):
     """Assign each regine in 'reg_gdf' to a single fylke and kommune.
 
-    Args:
+    Args
         reg_gdf: Geodataframe of regine boundaries from NVE. Must contain a column named
             'regine' with the regine IDs
         admin_gpkg: Str. Path to geopackage containing administrative data
         admin_year: Int. Year for administrative boundaries read from 'admin_gpkg'
 
-    Returns:
+    Returns
         Geodataframe. A copy of the original geodataframe, but with new columns named 'fylnr' and
         'komnr' added. Regines that cannot be assigned to administrative units (e.g. because they
         lie over the border in Sweden or Finland) are assigned a value of -1.
@@ -169,13 +170,13 @@ def assign_regines_to_ospar_regions(
 ):
     """Assign each regine in 'reg_gdf' to a single OSPAR region.
 
-    Args:
+    Args
         reg_gdf: Geodataframe of regine boundaries from NVE. Must contain a column named 'vassom'
             storing the vassdragsområde for each regine
         ospar_csv: Str. Default is a data table hosted on GitHub. Path to CSV mapping
             vassdragsområder to OSPAR regions
 
-    Returns:
+    Returns
         Geodataframe. A copy of the original geodataframe with a new column named 'ospar_region'
         appended.
     """
@@ -285,12 +286,12 @@ def calculate_ar50_land_cover_proportions(
 def calculate_nve_regine_lake_areas(reg_gdf, lake_gdf):
     """Calculate the total area of lakes in each regine based on NVE's innsjø database.
 
-    Args:
+    Args
         reg_gdf:  Geodataframe of regine boundaries from NVE. Must contain a column named 'regine'
             with the regine IDs
         lake_gdf: Geodataframe of lake polygons from NVE
 
-    Returns:
+    Returns
         Geodataframe with an additional column named 'a_lake_nve_km2'.
     """
     reg_gdf = reg_gdf.copy()
@@ -409,16 +410,16 @@ def calculate_regine_retention(df, regine_col, pars):
     """
     Aggregate lake retention factors to regine level by combining in series.
 
-    Args:
+    Args
         df: Dataframe of lake retention data. Must contain cols 'trans_par' for all 'pars'
         regine_col: Str. Column name in 'df' with regine codes for aggregation
         pars: List of str. Parameters to aggregate
 
-    Returns:
+    Returns
         DataFrame: Dataframe with columns [regine, trans_par, ret_par] for all parameters in
         'pars'.
 
-    Raises:
+    Raises
         ValueError: If 'regine_col' not found in 'df' or if any 'trans_{par}' not found in
         'df'.
     """
@@ -437,20 +438,23 @@ def calculate_regine_retention(df, regine_col, pars):
     return reg_df
 
 
-def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
+def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10, voll_dict=None):
     """
     Assign retention and transmission coefficients to each regine.
 
-    Args:
+    Args
         reg_gdf: Geodataframe of regine boundaries from NVE.
         regine_col: Str. Name of column in reg_gdf with regine codes. Default is "regine".
         dtm_res: Int. Resolution in file name of CSV with residence times. Default is 10.
+        voll_dict: Dict or None. Dictionary of Vollenweider parameters to use for estimating
+            retention and transmission for individual lakes. If None, default values based on
+            literature analysis are used.
 
-    Returns:
+    Returns
         GeoDataFrame: Copy of 'reg_gdf' with retention and transmission columns added for each
         parameter.
 
-    Raises:
+    Raises
         ValueError: If 'regine_col' not found in 'reg_gdf' or if any required column not found
         in 'df'.
     """
@@ -460,40 +464,89 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10):
     reg_gdf = reg_gdf.copy()
 
     # Get lake residence times
-    res_csv = f"../../data/lake_residence_times_{dtm_res}m_dem.csv"
+    res_csv = f"https://raw.githubusercontent.com/NIVANorge/teotil3/main/data/lake_residence_times_{dtm_res}m_dem.csv"
     df = pd.read_csv(res_csv)
 
     # Vollenweider parameters for individual lakes
-    voll_dict = {
-        "totp": {
-            "ind_var_col": "res_time_yr",
-            "model": "sigma_from_tau",
-            "k": 1,
-            "p": 0.5,
-        },
-        "tdp": {
-            "ind_var_col": "res_time_yr",
-            "model": "sigma_from_tau",
-            "k": 0.5,
-            "p": 0.5,
-        },
-        "tpp": {
-            "ind_var_col": "res_time_yr",
-            "model": "sigma_from_tau",
-            "k": 2,
-            "p": 0.5,
-        },
-        "totn": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 4.5},
-        "din": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 6.0},
-        "ton": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 1.4},
-        "ss": {"ind_var_col": "res_time_yr", "model": "sigma_constant", "sigma": 90},
-        "toc": {
-            "ind_var_col": "res_time_yr",
-            "model": "sigma_from_tau",
-            "k": 0.6,
-            "p": 0.4,
-        },
-    }
+    if voll_dict is None:
+        # Original parameters derived from literature data
+        # voll_dict = {
+        #     "totp": {
+        #         "ind_var_col": "res_time_yr",
+        #         "model": "sigma_from_tau",
+        #         "k": 1,
+        #         "p": 0.5,
+        #     },
+        #     "tdp": {
+        #         "ind_var_col": "res_time_yr",
+        #         "model": "sigma_from_tau",
+        #         "k": 0.5,
+        #         "p": 0.5,
+        #     },
+        #     "tpp": {
+        #         "ind_var_col": "res_time_yr",
+        #         "model": "sigma_from_tau",
+        #         "k": 2,
+        #         "p": 0.5,
+        #     },
+        #     "totn": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 4.5},
+        #     "din": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 6.0},
+        #     "ton": {"ind_var_col": "hyd_load_mpyr", "model": "sigma_from_depth", "s": 1.4},
+        #     "ss": {"ind_var_col": "res_time_yr", "model": "sigma_constant", "sigma": 90},
+        #     "toc": {
+        #         "ind_var_col": "res_time_yr",
+        #         "model": "sigma_from_tau",
+        #         "k": 0.6,
+        #         "p": 0.4,
+        #     },
+        # }
+        # Current default parameters modified from literature values during calibration
+        voll_dict = {
+            "totp": {
+                "ind_var_col": "res_time_yr",
+                "model": "sigma_from_tau",
+                "k": 1,
+                "p": 0.5,
+            },
+            "tdp": {
+                "ind_var_col": "res_time_yr",
+                "model": "sigma_from_tau",
+                "k": 0.2,
+                "p": 0.5,
+            },
+            "tpp": {
+                "ind_var_col": "res_time_yr",
+                "model": "sigma_from_tau",
+                "k": 3,
+                "p": 0.5,
+            },
+            "totn": {
+                "ind_var_col": "hyd_load_mpyr",
+                "model": "sigma_from_depth",
+                "s": 6,
+            },
+            "din": {
+                "ind_var_col": "hyd_load_mpyr",
+                "model": "sigma_from_depth",
+                "s": 8,
+            },
+            "ton": {
+                "ind_var_col": "hyd_load_mpyr",
+                "model": "sigma_from_depth",
+                "s": 3,
+            },
+            "ss": {
+                "ind_var_col": "res_time_yr",
+                "model": "sigma_constant",
+                "sigma": 60,
+            },
+            "toc": {
+                "ind_var_col": "res_time_yr",
+                "model": "sigma_from_tau",
+                "k": 0.4,
+                "p": 0.4,
+            },
+        }
     for par, params in voll_dict.items():
         df = calculate_lake_retention_vollenweider(df, par, params)
 
@@ -735,7 +788,7 @@ def aggregate_aquaculture_data(df):
 def calculate_aquaculture_nutrient_losses(df, coeff_df):
     """Calculate aquaculture nutrient losses.
 
-     Args
+    Args
         df: Dataframe of aquaculture production
         coeff_df: Dataframe from 'read_aquaculture_coefficients'
 
@@ -997,16 +1050,16 @@ def utm_to_wgs84_dd(utm_df, zone="utm_zone", east="utm_east", north="utm_north")
     have a different UTM Zone. (Note that if all rows have the same zone, this implementation is
     slow because it processes each row individually).
 
-    Args:
+    Args
         utm_df: Dataframe containing UTM co-ords
         zone: Str. Column defining UTM zone
         east: Str. Column defining UTM Easting
         north: Str. Column defining UTM Northing
 
-    Returns:
+    Returns
         Copy of utm_df with 'lat' and 'lon' columns added.
 
-    Raises:
+    Raises
         ValueError: If any of the input column names are not strings.
     """
     # Check that input arguments are strings
@@ -1053,10 +1106,10 @@ def patch_coordinates(df, col_list, source="site", target="outlet"):
         source: Str. Prefix for the source columns. Defaults to 'site'.
         target: Str. Prefix of the target columns. Defaults to 'outlet'.
 
-    Returns:
+    Returns
         DataFrame with target co-ordinates patched.
 
-    Raises:
+    Raises
         ValueError: If '{source}_{col}' and '{target}_{col}' columns are not present in 'df'.
     """
     for col in col_list:
@@ -1344,6 +1397,7 @@ def read_raw_industry_data(data_fold, year):
     Raises
         TypeError if 'data_fold' is not a string.
         TypeError if 'year' is not an integer.
+        ValueError if the 'Komm. nett' column contains NaNs.
     """
     if not isinstance(data_fold, str):
         raise TypeError("'data_fold' must be a valid file path.")
@@ -1364,6 +1418,12 @@ def read_raw_industry_data(data_fold, year):
     ind_path = os.path.join(data_fold, f"industri_{year}_raw.xlsx")
     df = pd.read_excel(ind_path, sheet_name=f"industri_{year}")
     df.dropna(how="all", inplace=True)
+
+    # Remove sites that discharge to the kommunal network (included in wastewater dataset)
+    if df["Komm. nett"].isna().sum() > 0:
+        raise ValueError("Column 'Komm. nett' contains NaNs.")
+    df = df.query("`Komm. nett` == False")
+
     if len(df["År"].unique()) > 1:
         print(
             f"WARNING: The industry dataset includes values for several years. Only data for {year} will be processed."
@@ -1539,7 +1599,7 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
         year: Int. Year of the data.
         eng: Obj. SQL engine connected to the database
 
-    Returns:
+    Returns
         pd.DataFrame: Processed data.
     """
     if not isinstance(xl_path, str):
@@ -1754,3 +1814,133 @@ def estimate_toc_from_bof_kof(gdf, sector):
     )
 
     return gdf
+
+
+def read_raw_agri_data(year, data_fold):
+    """Read the raw agricultural data from a NIBIO template. Templates must be named
+    "nibio_agri_data_{year}.xlsx" and have worksheets named 'Annual loss' and 'Risk loss'.
+
+    Args
+        year: Int. Year of interest.
+        data_fold: Str. Path to folder containing templates.
+
+    Returns
+        Dataframe of agricultural data.
+
+    Raises
+        ValueError if estimated losses are nagative.
+        ValueError if column names cannot be parsed correctly.
+    """
+    pars = ["totn", "din", "ton", "totp", "tdp", "tpp", "ss", "toc"]
+    srcs = ["agriculture", "agriculture_background"]
+    loss_types = ["annual", "risk"]
+
+    valid_cols = ["loss_type", "year", "regine"] + [
+        f"{src}_{par}_kg" for src, par in itertools.product(srcs, pars)
+    ]
+
+    xl_path = os.path.join(data_fold, f"nibio_agri_data_{year}.xlsx")
+    df_list = []
+    for loss_type in loss_types:
+        df = pd.read_excel(
+            xl_path, sheet_name=f"{loss_type.capitalize()} loss", header=[0, 1]
+        )
+        df.columns = df.columns.map("_".join).str.replace(" ", "")
+        names_dict = get_agri_names_dict(loss_type)
+        df.rename(columns=names_dict, inplace=True)
+        convert_agri_units(df)
+        calculate_derived_agri_parameters(df)
+
+        if (numeric_cols := df.select_dtypes(include=np.number)).lt(0).any().any():
+            raise ValueError(
+                f"The template for {year} contains negative losses for {numeric_cols.columns.tolist()}."
+            )
+
+        if df.isna().sum().sum() > 0:
+            print(
+                f"WARNING: Template for {year} contains NaNs. These will be filled with zero."
+            )
+            df.fillna(0, inplace=True)
+
+        df["year"] = year
+        df["loss_type"] = loss_type
+
+        if set(valid_cols) != set(df.columns):
+            raise ValueError("Template contains invalid columns.")
+
+        df = df[valid_cols]
+        df_list.append(df)
+
+    df = pd.concat(df_list, axis="rows")
+
+    return df
+
+
+def get_agri_names_dict(loss_type):
+    """Generates a dictionary for renaming the columns of the agriculture dataframe.
+
+    Args
+        loss_type: The type of loss. Must be either 'annual' or 'risk'.
+
+    Returns
+        A dictionary mapping old to new column names.
+
+    Raises
+        Value error if 'loss_type' not in ['annual', 'risk'].
+    """
+    if loss_type not in ["annual", "risk"]:
+        raise ValueError("'loss_type' must be either 'annual' or 'risk'.")
+
+    names_dict = {
+        "Regineunit_Unnamed:0_level_1": "regine",
+        f"TNnetto{loss_type}loss_kg": "agriculture_totn_kg",
+        f"TNbakgrunnsavr.{loss_type}loss_kg": "agriculture_background_totn_kg",
+        f"NO3-Nnetto{loss_type}loss_kg": "agriculture_din_kg",
+        f"NO3-Nbakgrunnsavr.{loss_type}loss_kg": "agriculture_background_din_kg",
+        f"TPnetto{loss_type}loss_kg": "agriculture_totp_kg",
+        f"TPbakgrunnsavr.{loss_type}loss_kg": "agriculture_background_totp_kg",
+        f"PO4-Pnetto{loss_type}loss_kg": "agriculture_tdp_kg",
+        f"PO4-Pbakgrunnsavr.{loss_type}loss_kg": "agriculture_background_tdp_kg",
+        f"SSnetto{loss_type}loss_Tonn": "agriculture_ss_tonnes",
+        f"SSbakgrunnsavr.{loss_type}loss_Tonn": "agriculture_background_ss_tonnes",
+        f"TOCnetto{loss_type}loss_Tonn": "agriculture_toc_tonnes",
+        f"TOCbakgrunnsavr.{loss_type}loss_Tonn": "agriculture_background_toc_tonnes",
+    }
+
+    return names_dict
+
+
+def convert_agri_units(df):
+    """Converts the units of the agriculture dataframe in-place.
+
+    Args
+        df: The dataFrame to convert.
+
+    Returns
+        None. 'df' is updated in-place.
+    """
+    for col in df.columns:
+        parts = col.split("_")
+        if parts[-1] == "tonnes":
+            df["_".join(parts[:-1] + ["kg"])] = df[col] * 1000
+            del df[col]
+
+
+def calculate_derived_agri_parameters(df):
+    """Calculate "derived" agricultural (TON and TPP) as the difference between the total
+    and the reported sub-fractions. The dataFrame is modified in-place.
+
+    Args
+        df: The dataFrame to process.
+
+    Returns
+        None. 'df' is updated in-place.
+    """
+    df["agriculture_ton_kg"] = df["agriculture_totn_kg"] - df["agriculture_din_kg"]
+    df["agriculture_background_ton_kg"] = (
+        df["agriculture_background_totn_kg"] - df["agriculture_background_din_kg"]
+    )
+    df["agriculture_tpp_kg"] = df["agriculture_totp_kg"] - df["agriculture_tdp_kg"]
+    df["agriculture_background_tpp_kg"] = (
+        df["agriculture_background_totp_kg"] - df["agriculture_background_tdp_kg"]
+    )

@@ -53,7 +53,8 @@ def plot_network(
 
     # Update labels with 'quant'
     for nd in list(nx.topological_sort(g2)):
-        g2.nodes[nd]["label"] = "%s\n(%.2f)" % (nd, g.nodes[nd][stat][quant])
+        if nd != '0':
+            g2.nodes[nd]["label"] = "%s\n(%.2f)" % (nd, g.nodes[nd][stat][quant])
 
     # Draw
     res = nx.nx_agraph.to_agraph(g2)
@@ -104,7 +105,8 @@ def plot_catchment(
         raise ValueError("'include_connected' must be either True or False.")
 
     if basemap == "kartverket":
-        basemap = "https://cache.kartverket.no/topo4/v1/gmaps/{z}/{x}/{y}.png"
+        # basemap = "https://cache.kartverket.no/topo4/v1/gmaps/{z}/{x}/{y}.png"
+        basemap = "http://opencache.statkart.no/gatekeeper/gk/gk.open_gmaps?layers=topo4&zoom={z}&x={x}&y={y}"
 
     if include_connected:
         if direct == "down":
