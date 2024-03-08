@@ -8,7 +8,7 @@ Data processing and intermediate analysis for developing TEOTIL3. For a detailed
  * [Notebook 2.1b: Summarise and combine regine-level data](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1b_update_core_datasets.ipynb)
  * [Notebook 2.1c: Transfer new datasets to PostGIS](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1c_create_postgis.ipynb)
  * [Notebook 2.1d: Annual data processing/updating](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1d_annual_data_upload.ipynb)
- * [Notebook 2.1e: Compare databases for TEOTIL2 and TEOTIL3](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1e_compare_oracle_postgis.ipynb.ipynb)
+ * [Notebook 2.1e: Compare databases for TEOTIL2 and TEOTIL3](https://nbviewer.org/github/NIVANorge/teotil3/blob/main/notebooks/development/T2-1e_compare_oracle_postgis.ipynb)
  
 ### Task 2.2: Generate catchment hierarchy
 
