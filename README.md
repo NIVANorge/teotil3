@@ -8,11 +8,11 @@ The model code itself is [here](https://github.com/NIVANorge/teotil3/tree/main/t
 
 ## Tutorials
 
-Tutorials describing how to use the new model can be found [here](https://github.com/NIVANorge/teotil3/tree/main/notebooks/tutorials).
+Tutorials describing how to use the new model can be found [here](https://github.com/NIVANorge/teotil3/tree/main/notebooks/tutorials#teotil3-tutorials).
 
 ## Development code and notebooks
 
-Code and data analysis relating to new or updated components of the model can be found [here](https://github.com/NIVANorge/teotil3/tree/main/notebooks/development).
+Code and data analysis relating to new or updated components of the model can be found [here](https://github.com/NIVANorge/teotil3/tree/main/notebooks/development#teotil3-development-notebooks).
 
 ## Other information
 
