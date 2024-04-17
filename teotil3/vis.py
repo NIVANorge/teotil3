@@ -503,3 +503,102 @@ def input_data_summary_map(model_input_file, regine_list, year, eng, par):
     m = _create_map(reg_gdf, pt_gdf, par)
 
     return m
+
+def _remove_prefix(text, prefix):
+    """Remove 'prefix' from 'text'."""
+    if text.startswith(prefix):
+        return text[len(prefix) :]
+    return text
+
+
+def plot_regine_barchart(reg_id, res_df, stat="accum", index_col="year"):
+    """Plot bar charts based on a TEOTIL results dataframe for multiple years.
+
+    Args
+        reg_id: Str. The regine ID of interest.
+        res_df: DataFrame of model results for several years.
+        stat: Str. Either 'accum' or 'local'. Defaults 'accum'.
+        index_col: Str. The name of the index column in the DataFrame. Default 'year'.
+
+    Returns
+        Matplotlib axes object.
+
+    Raises
+        KeyError if 'index_col' not in 'res_df'.
+        ValueError if 'stat' is not 'accum' or 'local'.        ValueError if units in 'res_df' are inconsistent.
+
+    """
+    if index_col not in res_df.columns:
+        raise KeyError(f"Index column '{index_col}' not found in 'res_df'.")
+    if stat not in ("accum", "local"):
+        raise ValueError("'stat' must be either 'accum' or 'local'.")
+
+    # Get data of interest
+    df = res_df.query("regine == @reg_id").set_index(index_col)
+    cols = [col for col in df.columns if col.startswith(stat)]
+    df = df[cols].copy()
+    cols = [_remove_prefix(col, f"{stat}_") for col in cols]
+    df.columns = cols
+
+    # Setup plot
+    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(15, 10))
+    axes = axes.flatten()
+
+    # Stacked bar charts for each chem parameter
+    pars = ["TOTN", "DIN", "TON", "TOTP", "TDP", "TPP", "TOC", "SS"]
+    for idx, par in enumerate(pars):
+        par_cols = [
+            col
+            for col in df.columns
+            if (par.lower() in (i.lower() for i in col.split("_")))
+            and not col.startswith("trans_")
+        ]
+        units = [col.split("_")[-1] for col in par_cols]
+        if len(set(units)) != 1:
+            raise ValueError(
+                f"Results for {par} use inconsistent units ({set(units)})."
+            )
+        unit = units[0]
+        par_df = df[par_cols].copy()
+        par_cols = [col.split("_")[0].capitalize() for col in par_cols]
+        par_df.columns = par_cols
+        if unit == "kg":
+            par_df = par_df / 1000
+        par_df.plot(
+            kind="bar",
+            stacked=True,
+            ax=axes[idx],
+            legend=False,
+            cmap="tab10",
+        )
+        axes[idx].set_title(par)
+        axes[idx].set_ylabel(f"{par} (tonnes)")
+        axes[idx].set_xlabel("")
+
+    # Line plot for water discharge
+    if stat == "accum":
+        q_col = "q_m3/s"
+    else:
+        q_col = "q_cat_m3/s"
+    q_df = df[[q_col]].copy()
+    q_df.plot(ax=axes[-1], legend=False, marker="o")
+    axes[-1].set_title("Water discharge")
+    axes[-1].set_ylabel("Discharge (m3/s)")
+    axes[-1].set_xlabel("")
+
+    # Set x-ticks and labels to match other subplots
+    axes[-1].set_xticks(q_df.index)
+    axes[-1].set_xticklabels(q_df.index, rotation=90)
+
+    # Main title
+    if stat == "accum":
+        label = "Accumulated"
+    else:
+        label = "Local"
+    plt.suptitle(f"{label} inputs for regine {reg_id}", fontsize=20)
+    plt.tight_layout()
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.07), ncol=5)
+
+    return axes
