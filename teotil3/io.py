@@ -856,6 +856,116 @@ def get_annual_point_data(
         return df
 
 
+def get_raw_annual_point_data(
+    engine,
+    year,
+    sector,
+    par_list=[
+        "totn_kg",
+        "din_kg",
+        "ton_kg",
+        "totp_kg",
+        "tdp_kg",
+        "tpp_kg",
+        "toc_kg",
+        "ss_kg",
+    ],
+):
+    """Get annual point data for aquaculture, industry or wasterwater treatment from the database.
+    Unlike 'get_annual_point_data', this function does not aggregate to regine level and just
+    returns a dataframe of point discharges.
+
+    Args
+        year: Int. Year of interest
+        sector: Str. One of ['aquaculture', 'industry', 'large wastewater', 'small wastewater']
+        engine: SQL-Alchemy 'engine' object already connected to the 'teotil3' database
+        par_list: List of parameters to consider. If None, returns data for all parameters in
+            the database. The default is the basic set of parameters considered by TEOTIL3.
+
+    Returns
+        Dataframe of point discharge data.
+
+    Raises
+        ValueError if 'sector' is not one of
+            ['aquaculture', 'industry', 'large wastewater', 'small wastewater']
+    """
+    valid_sectors = [
+        "aquaculture",
+        "industry",
+        "large wastewater",
+        "small wastewater",
+    ]
+    sector = sector.lower()
+    if sector not in valid_sectors:
+        raise ValueError(
+            "'sector' must be one of ['aquaculture', 'industry', 'large wastewater', 'small wastewater']."
+        )
+
+    sql = text(
+        """
+        SELECT d.site_id,
+            d.site_name,
+            d.sector,
+            d.type,
+            d.site_x_utm33,
+            d.site_y_utm33,
+            d.outlet_x_utm33,
+            d.outlet_y_utm33,
+            d.year,
+            d.regine,
+            CONCAT_WS('_', c.name, c.unit) AS par_name,
+            (a.value * b.factor) AS value
+        FROM teotil3.point_source_values a,
+            teotil3.input_output_param_conversion b,
+            teotil3.output_param_definitions c,
+            (SELECT a.site_id,
+                a.name AS site_name,
+                a.sector,
+                a.type,
+                ST_X(a.site_geom) AS site_x_utm33,
+                ST_Y(a.site_geom) AS site_y_utm33,
+                ST_X(a.outlet_geom) AS outlet_x_utm33,
+                ST_Y(a.outlet_geom) AS outlet_y_utm33,
+                a.year,
+                b.regine
+            FROM teotil3.point_source_locations a,
+                teotil3.regines b
+            WHERE ST_WITHIN(a.outlet_geom, b.geom)
+            ) d
+        WHERE a.in_par_id = b.in_par_id
+            AND b.out_par_id = c.out_par_id
+            AND a.site_id = d.site_id
+            AND a.year = :year
+            AND d.year = :year
+            AND d.sector = :sector
+    """
+    )
+    df = pd.read_sql(sql, engine, params={"year": year, "sector": sector.capitalize()})
+
+    if len(df) == 0:
+        print(f"    No {sector} data for {year}.")
+
+        return None
+
+    elif len(df[df.duplicated(["site_id", "year", "par_name"], keep=False)]) > 0:
+        raise ValueError("Data contains duplicates for ['site_id', 'year', 'name']")
+
+    else:
+        idx_cols = [col for col in df.columns if col not in ("par_name", "value")]
+        df = df.pivot(index=idx_cols, columns="par_name", values="value").copy()
+        df.columns.name = ""
+        if par_list:
+            par_cols = [col for col in df.columns if col.lower() in par_list]
+            df = df[par_cols].copy()
+        else:
+            par_cols = [col for col in df.columns if col not in idx_cols]
+        df = df.round(1)
+        df.reset_index(inplace=True)
+        df.dropna(subset=par_cols, how="all", inplace=True)
+
+        return df
+
+
 def assign_spredt_to_regines(
     reg_gdf,
     spr_df,
