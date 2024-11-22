@@ -134,7 +134,7 @@ def assign_regines_to_administrative_units(reg_gdf, admin_gpkg, admin_year):
 
         col_name = admin_unit[:3] + "nr"
         adm_gdf = gpd.read_file(
-            admin_gpkg, layer=f"{admin_unit}{admin_year}", driver="GPKG"
+            admin_gpkg, layer=f"{admin_unit}{admin_year}"
         )
         adm_gdf = adm_gdf[[col_name, "geometry"]]
 
