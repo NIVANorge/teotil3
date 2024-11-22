@@ -230,7 +230,7 @@ def assign_regine_hierarchy(
                 "WARNING: Not all NaNs drain to Sweden. Are you sure setting 'nan_to_vass' as True is OK?"
             )
             print(vassoms)
-        df[regine_down_col].fillna(df["vassomx"] + ".", inplace=True)
+        df[regine_down_col] = df[regine_down_col].fillna(df["vassomx"] + ".")
 
     del df["vassomx"]
 
@@ -241,9 +241,9 @@ def assign_regine_hierarchy(
     for col in df.columns:
         if col not in (regine_col, regine_down_col, "geometry"):
             if col.split("_")[0] == "trans":
-                df[col].fillna(1, inplace=True)
+                df[col] = df[col].fillna(1)
             else:
-                df[col].fillna(0, inplace=True)
+                df[col] = df[col].fillna(0)
 
     return df
 
@@ -285,7 +285,7 @@ def get_regine_geodataframe(engine, year):
         axis="columns",
         inplace=True,
     )
-    gdf.set_geometry("geometry", drop=False, inplace=True)
+    gdf.set_geometry("geometry", inplace=True)
 
     return gdf
 
@@ -384,7 +384,7 @@ def rescale_annual_flows(reg_gdf, data_supply_year, year, engine):
     reg_gdf = pd.merge(reg_gdf, q_fac_df, how="left", on="vassom")
     for col in ["runoff_mm/yr", "q_cat_m3/s"]:
         reg_gdf[col] = reg_gdf[col] * reg_gdf["flow_factor"]
-        reg_gdf[col].fillna(value=0, inplace=True)
+        reg_gdf[col] = reg_gdf[col].fillna(value=0)
     reg_gdf["runoff_mm/yr"] = reg_gdf["runoff_mm/yr"].round(0).astype(int)
     reg_gdf["q_cat_m3/s"] = reg_gdf["q_cat_m3/s"].round(6)
     del reg_gdf["flow_factor"]
@@ -649,7 +649,7 @@ def make_input_file(
     reg_gdf = pd.merge(reg_gdf, agri_df, how="left", on="regine")
     for col in agri_df.columns:
         if col != "regine":
-            reg_gdf[col].fillna(0, inplace=True)
+            reg_gdf[col] = reg_gdf[col].fillna(0)
 
     # Determine hydrological connectivity
     reg_gdf = assign_regine_hierarchy(
