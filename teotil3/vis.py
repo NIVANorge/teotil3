@@ -105,8 +105,7 @@ def plot_catchment(
         raise ValueError("'include_connected' must be either True or False.")
 
     if basemap == "kartverket":
-        # basemap = "https://cache.kartverket.no/topo4/v1/gmaps/{z}/{x}/{y}.png"
-        basemap = "http://opencache.statkart.no/gatekeeper/gk/gk.open_gmaps?layers=topo4&zoom={z}&x={x}&y={y}"
+        basemap = "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png"
 
     if include_connected:
         if direct == "down":
