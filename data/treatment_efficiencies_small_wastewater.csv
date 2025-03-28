@@ -1,0 +1,15 @@
+ssb_code,ssb_desc,teotil_type,totn_eff_old_pct,totp_eff_old_pct,totn_eff_new_pct,totp_eff_new_pct,bof5_eff_new_pct,ss_eff_new_pct,totn_redfac_new_pct,totp_redfac_new_pct,bof5_redfac_new_pct,ss_redfac_new_pct
+FASTBOURENS2,Urenset utslipp,Direkte utslipp,0,0,0,0,0,0,0,0,0,0
+FASTBOSLAM2,Slamavskiller uten etterfiltrering,Slamavskiller,5,5,10,10,25,60,25,25,25,25
+FASTBOINFILT2,Slamavskiller med infiltrasjon (stedegne masser),Infiltrasjonsanlegg,20,75,40,90,90,100,10,20,10,5
+FASTBOSAND2,Slamavskiller med sandfilter (tilførte masser),Sandfilteranlegg,15,15,30,75,90,95,10,75,20,10
+FASTBOBIO2,Minirenseanlegg - biologisk,Biologisk,10,15,30,60,90,80,10,20,10,20
+FASTBOKJEM2,Minirenseanlegg - kjemisk,Kjemisk,15,90,20,90,70,80,20,20,20,20
+FASTBOKJEMBIO2,Minirenseanlegg - kjemisk/biologisk,Biologisk og kjemisk,15,90,40,90,90,90,10,10,10,20
+FASTBOTANKSVART2,"Tett tank for svartvann, urenset gråvann",Tett tank for svartvann,90,75,90,80,40,60,10,10,10,10
+FASTBOTANK2,Tett tank for svart- og gråvann,Tett tank (for alt avløpsvann),100,100,100,100,100,100,10,10,10,10
+FASTBOBIOLTOALETT2,"Biodo, forbrenningsdo, utedo m.m., urenset gråvann",Biologisk toalett,75,75,90,80,40,60,10,10,10,10
+FASTBOVATMARK2,Slamavskiller med konstruert våtmark/filterbed,Konstruert våtmark,50,90,50,90,90,95,10,50,10,5
+FASTBOTANKFILTER2,"Tett tank for svartvann, gråvannsfilter","Tett tank for svartvann, gråvannsfilter",90,90,95,95,95,100,15,25,10,10
+FASTBOBIOLTOALETTFILTER2,"Biodo, forbrenningsdo, utedo m.m., gråvannsfilter","Biologisk toalett, gråvannsfilter",80,90,95,95,95,100,15,25,10,10
+FASTBOANNEN2,Annen løsning,Annen løsning,20,50,20,50,50,50,10,10,10,10
