@@ -133,3 +133,48 @@ def linear_regression_summary(
 
         plt.tight_layout()
         plt.show()
+
+
+def double_mad_from_median(data, thresh=3.5):
+    """Simple test for outliers in 1D data. Based on the standard MAD approach, but
+    modified slightly to allow for skewed datasets. See the example in R here:
+    http://eurekastatistics.com/using-the-median-absolute-deviation-to-find-outliers/
+    (especially the section "Unsymmetric Distributions and the Double MAD". The
+    Python code is based on this post
+
+        https://stackoverflow.com/a/29222992/505698
+
+    See also here
+
+        https://stackoverflow.com/a/22357811/505698
+
+    Args
+        data:   Array-like. 1D array of values.
+        thresh: Float. Default 3.5. Larger values detect fewer outliers. See the
+                section entitled "Z-Scores and Modified Z-Scores" here
+                https://www.itl.nist.gov/div898/handbook/eda/section3/eda35h.htm
+    Returns
+        Array of Bools where ones indicate outliers.
+    """
+    m = np.nanmedian(data)
+    abs_dev = np.abs(data - m)
+    left_mad = np.median(abs_dev[data <= m])
+    right_mad = np.median(abs_dev[data >= m])
+    
+    # if (left_mad == 0) or (right_mad == 0):
+    #     # Don't identify any outliers. Not strictly correct - see last section of
+    #     # https://eurekastatistics.com/using-the-median-absolute-deviation-to-find-outliers/
+    #     return np.zeros_like(data, dtype=bool)
+
+    # Replace zero MAD values with a small positive number. Not sure whether this is strictly
+    # valid either, but it seems to work quite well and allows flagging of outliers when the
+    # left or right MADs are zero
+    left_mad = left_mad if left_mad != 0 else 1e-6
+    right_mad = right_mad if right_mad != 0 else 1e-6
+
+    data_mad = left_mad * np.ones(len(data))
+    data_mad[data > m] = right_mad
+    modified_z_score = 0.6745 * abs_dev / data_mad
+    modified_z_score[data == m] = 0
+
+    return modified_z_score > thresh
