@@ -538,7 +538,7 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10, voll_dict=
             "ss": {
                 "ind_var_col": "res_time_yr",
                 "model": "sigma_constant",
-                "sigma": 60,
+                "sigma": 5,
             },
             "toc": {
                 "ind_var_col": "res_time_yr",
