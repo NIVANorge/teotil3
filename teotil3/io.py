@@ -511,12 +511,12 @@ def calculate_background_inputs(reg_gdf):
         "urban_tpp_µg/l",
         "urban_toc_µg/l",
         "urban_ss_mg/l",
+        "wood_ss_mg/l",
+        "upland_ss_mg/l",
+        "glacier_ss_mg/l",
     ]
     area_based_pars = [
         "lake_din_kg/km2",
-        "wood_ss_kg/km2",
-        "upland_ss_kg/km2",
-        "glacier_ss_kg/km2",
     ]
 
     # Perform calculations for concentration-based parameters
