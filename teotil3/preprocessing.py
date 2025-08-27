@@ -1663,10 +1663,11 @@ def restructure_small_wastewater_data(df):
     """Basic restructuring of small wastewater data."""
     df = df.melt(id_vars="komnr")
     df["sector"] = "Small wastewater"
-    df["variable"] = df["variable"].str.replace("FOSFOR ", "TOTP_kg;")
-    df["variable"] = df["variable"].str.replace("NITROGEN ", "TOTN_kg;")
-    df["variable"] = df["variable"].str.replace("BOF ", "BOF5_kg;")
-    df[["variable", "type"]] = df["variable"].str.split(";", n=1, expand=True)
+    df["variable"] = df["variable"].str.replace("TOTP", "TOTP_kg")
+    df["variable"] = df["variable"].str.replace("TOTN", "TOTN_kg")
+    df["variable"] = df["variable"].str.replace("BOF5", "BOF5_kg")
+    df["variable"] = df["variable"].str.replace("SS", "SS_kg")
+    df[["variable", "type"]] = df["variable"].str.split("-", n=1, expand=True)
 
     # Ignore 'Tett tank (for alt avløpsvann)' as it is always zero (it's transported to the
     # "large" plants)
