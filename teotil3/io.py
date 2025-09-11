@@ -702,6 +702,7 @@ def get_annual_spredt_data(
         "tdp_kg",
         "tpp_kg",
         "toc_kg",
+        "ss_kg",
     ],
 ):
     """Get annual 'spredt' data for each kommune. 'spredt' comprises wastewater treatment
