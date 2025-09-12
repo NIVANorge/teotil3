@@ -133,9 +133,7 @@ def assign_regines_to_administrative_units(reg_gdf, admin_gpkg, admin_year):
         print(f"Processing {admin_unit}")
 
         col_name = admin_unit[:3] + "nr"
-        adm_gdf = gpd.read_file(
-            admin_gpkg, layer=f"{admin_unit}{admin_year}"
-        )
+        adm_gdf = gpd.read_file(admin_gpkg, layer=f"{admin_unit}{admin_year}")
         adm_gdf = adm_gdf[[col_name, "geometry"]]
 
         # Intersect
@@ -151,7 +149,7 @@ def assign_regines_to_administrative_units(reg_gdf, admin_gpkg, admin_year):
         int_gdf.drop_duplicates("regine", keep="last", inplace=True)
         del int_gdf["area_km2"]
         reg_gdf = pd.merge(reg_gdf, int_gdf, how="left", on="regine")
-        reg_gdf[col_name].fillna("-1", inplace=True)
+        reg_gdf[col_name] = reg_gdf[col_name].fillna("-1")
 
         print(f"   {len(int_gdf)} regines assigned to {admin_unit}.")
 
@@ -538,7 +536,7 @@ def assign_regine_retention(reg_gdf, regine_col="regine", dtm_res=10, voll_dict=
             "ss": {
                 "ind_var_col": "res_time_yr",
                 "model": "sigma_constant",
-                "sigma": 5,
+                "sigma": 10,
             },
             "toc": {
                 "ind_var_col": "res_time_yr",
@@ -683,7 +681,7 @@ def estimate_aquaculture_nutrient_inputs(
         "UTTAK_KILO",
     ]
     for col in cols:
-        df[col].fillna(value=0, inplace=True)
+        df[col] = df[col].fillna(value=0)
 
     # Calculate biomass
     df = calculate_aquaculture_biomass(df)
@@ -1121,7 +1119,7 @@ def patch_coordinates(df, col_list, source="site", target="outlet"):
         if target_col not in df.columns:
             raise ValueError(f"'{target_col}' not found in columns of df.")
 
-        df[target_col].fillna(df[source_col], inplace=True)
+        df[target_col] = df[target_col].fillna(df[source_col])
 
     return df
 
@@ -1169,16 +1167,15 @@ def filter_valid_utm_zones(
 
 
 def read_raw_large_wastewater_data(data_fold, year):
-    """Reads the raw, gap-filled data for TOTN, TOTP, BOF5 and KOF from "large" (>50 p.e.)
-    wastewater treatment sites provided by SSB. Note that this dataset includes some data that is
-    duplicated in the "miljøgifter" dataset.
+    """Reads the raw, gap-filled data for TOTN, TOTP, SS, BOF5 and KOF from "large"
+    (>50 p.e.) wastewater treatment sites.
 
     Args
-        data_fold: Str. Folder containg raw data files, with the file structure as described above
-        year: Int. Year being processed
+        data_fold: Str. Folder containg raw data file.
+        year: Int. Year being processed.
 
     Returns
-        Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
+        Geodataframe in 'wide' format (in EPSG 25833).
 
     Raises
         TypeError if 'data_fold' is not a string.
@@ -1190,22 +1187,14 @@ def read_raw_large_wastewater_data(data_fold, year):
         raise TypeError("'year' must be an integer.")
 
     column_mappings = {
-        "ANLEGGSNR": "site_id",
-        "ANLEGGSNAVN": "name",
-        "Sone": "site_zone",
-        "UTM_E": "site_east",
-        "UTM_N": "site_north",
-        "Sone_Utslipp": "outlet_zone",
-        "UTM_E_Utslipp": "outlet_east",
-        "UTM_N_Utslipp": "outlet_north",
-        "MENGDE_P_UT_kg": "TOTP_kg",
-        "MENGDE_N_UT_kg": "TOTN_kg",
+        "anlegg_nr": "site_id",
+        "anlegg_name": "name",
     }
-    val_cols = ["TOTP_kg", "TOTN_kg", "BOF5_kg", "KOF_kg"]
+    pars = ["TOTP", "TOTN", "SS", "BOF5", "KOF"]
 
-    # Read site locs and data for TOTN and TOTP
-    stan_path = os.path.join(data_fold, f"avlop_stor_anlegg_{year}_raw.xlsx")
-    df = pd.read_excel(stan_path, sheet_name=f"store_anlegg_{year}")
+    # Read raw data
+    stan_path = os.path.join(data_fold, f"large_wastewater_{year}_raw.xlsx")
+    df = pd.read_excel(stan_path)
     df.dropna(how="all", inplace=True)
     df["sector"] = "Large wastewater"
     df["year"] = year
@@ -1251,38 +1240,27 @@ def read_raw_large_wastewater_data(data_fold, year):
     gdf = gpd.GeoDataFrame(pd.concat([df, geom_df], axis=1))
     gdf.set_geometry("outlet_geom", inplace=True)
 
-    # Join treatment types, BOF5 and KOF
-    types_path = os.path.join(
-        data_fold, f"avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx"
-    )
-    typ_df = pd.read_excel(types_path, sheet_name="data")
-    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS", "utslipp_BOF5", "utslipp_KOF"]]
-    typ_df.columns = ["site_id", "type", "BOF5_kg", "KOF_kg"]
-    typ_df.dropna(how="all", inplace=True)
-    typ_df["type"].replace({"?": "Annen rensing"}, inplace=True)
-    gdf = gdf.merge(typ_df, how="left", on="site_id")
-    gdf["type"].fillna("Annen rensing", inplace=True)
-    gdf["BOF5_kg"].fillna(0, inplace=True)
-    gdf["KOF_kg"].fillna(0, inplace=True)
+    # Convert units and fill NaNs with zero
+    for par in pars:
+        gdf[f"{par}_kg"] = (1000 * gdf[f"{par.lower()}_out_tonnes"]).fillna(0)
     gdf.reset_index(drop=True, inplace=True)
     id_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
+    val_cols = [f"{par}_kg" for par in pars]
     gdf = gdf[id_cols + val_cols]
 
     return gdf
 
 
 def read_raw_miljogifter_data(data_fold, year):
-    """Reads the raw, not-gap-filled data for "large" (>50 p.e.) wastewater treatment
-    sites provided by SSB. Note that the 'miljøgifter' dataset includes some data
-    that is duplicated in the "store anlegg" dataset.
+    """Reads the raw, not-gap-filled metals data for "large" (>50 p.e.) wastewater
+    treatment plants.
 
     Args
-        data_fold: Str. Folder containg raw data files, with the file structure as
-                   described above
-        year:      Int. Year being processed
+        data_fold: Str. Folder containg raw data files.
+        year:      Int. Year being processed.
 
     Returns
-        Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
+        Geodataframe in 'wide' format (in EPSG 25833).
 
     Raises
         TypeError if 'data_fold' is not a string.
@@ -1294,28 +1272,21 @@ def read_raw_miljogifter_data(data_fold, year):
         raise TypeError("'year' must be an integer.")
 
     column_mappings = {
-        "ANLEGGSNR": "site_id",
-        "ANLEGGSNAVN": "name",
-        "SONEBELTE": "site_zone",
-        "UTMOST": "site_east",
-        "UTMNORD": "site_north",
-        "RESIP2": "outlet_zone",
-        "RESIP3": "outlet_east",
-        "RESIP4": "outlet_north",
+        "anlegg_nr": "site_id",
+        "anlegg_name": "name",
     }
-    val_cols = [
-        "KONSMENGDSS10",
-        "MILJOGIFTAS2",
-        "MILJOGIFTCD2",
-        "MILJOGIFTCR2",
-        "MILJOGIFTCU2",
-        "MILJOGIFTHG2",
-        "MILJOGIFTNI2",
-        "MILJOGIFTPB2",
-        "MILJOGIFTZN2",
+    pars = [
+        "As",
+        "Cd",
+        "Cr",
+        "Cu",
+        "Hg",
+        "Ni",
+        "Pb",
+        "Zn",
     ]
-    miljo_path = os.path.join(data_fold, f"avlop_miljogifter_{year}_raw.xlsx")
-    df = pd.read_excel(miljo_path, sheet_name=f"miljogifter_{year}")
+    miljo_path = os.path.join(data_fold, f"metals_{year}_raw.xlsx")
+    df = pd.read_excel(miljo_path)
     df.dropna(how="all", inplace=True)
     df["sector"] = "Large wastewater"
     df["year"] = year
@@ -1360,25 +1331,14 @@ def read_raw_miljogifter_data(data_fold, year):
         geom_df = pd.concat([geom_df, gdf[f"{loc}_geom"]], axis=1)
     gdf = gpd.GeoDataFrame(pd.concat([df, geom_df], axis=1))
     gdf.set_geometry("outlet_geom", inplace=True)
-
-    # Join treatment types
-    types_path = os.path.join(
-        data_fold, f"avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx"
-    )
-    typ_df = pd.read_excel(types_path, sheet_name="data")
-    typ_df = typ_df[["ANLEGGSNR", "RENSPRINS"]]
-    typ_df.columns = ["site_id", "type"]
-    typ_df.dropna(how="all", inplace=True)
-    typ_df["type"].replace({"?": "Annen rensing"}, inplace=True)
-    gdf = gdf.merge(typ_df, how="left", on="site_id")
-    gdf["type"].fillna("Annen rensing", inplace=True)
     gdf.reset_index(drop=True, inplace=True)
-    id_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
-    gdf = gdf[id_cols + val_cols]
 
-    # Add units
-    units_dict = {par: f"{par}_kg" for par in val_cols}
-    gdf.rename(units_dict, axis="columns", inplace=True)
+    # Just data of interest
+    for par in pars:
+        gdf[f"{par}_kg"] = gdf[f"{par}_out_kg"]
+    id_cols = ["site_id", "name", "sector", "type", "year", "site_geom", "outlet_geom"]
+    val_cols = [f"{par}_kg" for par in pars]
+    gdf = gdf[id_cols + val_cols]
 
     return gdf
 
@@ -1387,12 +1347,11 @@ def read_raw_industry_data(data_fold, year):
     """Reads the raw industry data provided by Miljødirektoratet.
 
     Args
-        data_fold: Str. Folder containg raw data files, with the file structure as
-                   described above
-        year:      Int. Year being processed
+        data_fold: Str. Folder containg raw data files.
+        year:      Int. Year being processed.
 
     Returns
-        Geodataframe in 'wide' format. A point geodataframe in EPSG 25833.
+        Geodataframe in 'wide' format (in EPSG 25833).
 
     Raises
         TypeError if 'data_fold' is not a string.
@@ -1415,8 +1374,8 @@ def read_raw_industry_data(data_fold, year):
         "Mengde": "value",
     }
     val_cols = ["variable", "value"]
-    ind_path = os.path.join(data_fold, f"industri_{year}_raw.xlsx")
-    df = pd.read_excel(ind_path, sheet_name=f"industri_{year}")
+    ind_path = os.path.join(data_fold, f"industry_{year}_raw.xlsx")
+    df = pd.read_excel(ind_path)
     df.dropna(how="all", inplace=True)
 
     # Remove sites that discharge to the kommunal network (included in wastewater dataset)
@@ -1456,7 +1415,7 @@ def read_raw_industry_data(data_fold, year):
     gdf = gpd.GeoDataFrame(pd.concat([df, geom_df], axis=1))
     gdf.set_geometry("outlet_geom", inplace=True)
     gdf.reset_index(drop=True, inplace=True)
-    gdf["Enhet"].replace({"tonn": "tonnes"}, inplace=True)
+    gdf["Enhet"] = gdf["Enhet"].replace({"tonn": "tonnes"})
     gdf["variable"] = gdf["Komp.kode"] + "_" + gdf["Enhet"]
 
     # Ignore some pars as they overlap with estimates based on TOTN and TOTP
@@ -1473,35 +1432,21 @@ def read_raw_industry_data(data_fold, year):
 
 
 def read_large_wastewater_and_industry_data(data_fold, year, eng):
-    """Convenience function for processing the raw "store anlegg", "miljøgifter" and "industry"
-    datasets. Assumes the raw files are named and arranged as follows:
-
-        data_fold/
-        ├─ avlop_stor_anlegg_{year}_raw.xlsx
-        │  ├─ store_anlegg_{year} [worksheet]
-        │
-        ├─ avlop_stor_anlegg_{year}_treatment_types_bof_kof.xlsx
-        │  ├─ data [worksheet]
-        │
-        ├─ avlop_miljogifter_{year}_raw.xlsx
-        │  ├─ miljogifter_{year} [worksheet]
-        │
-        ├─ industri_{year}_raw.xlsx
-        │  ├─ industri_{year} [worksheet]
-
-    This function reads all the raw files and combines site locations and data values into a
-    geodataframe and a dataframe, respectively. Parameter names are mapped to input parameter
-    IDs in the database, and duplicates are removed. Sites without coordinates are highlighted.
+    """Convenience function for processing the raw "large wastewater", "metals" and
+    "industry" datasets. This function reads all the raw files and combines site
+    locations and data values into a geodataframe and a dataframe, respectively.
+    Parameter names are mapped to input parameter IDs in the database,
+    and duplicates are removed. Sites without coordinates are highlighted.
 
     Args
-        data_fold: Str. Folder containg raw data files, with the file structure as described
-            above
-        year: Int. Year being processed
-        eng: Obj. Active database connection object connected to PostGIS
+        data_fold: Str. Folder containg raw data files.
+        year: Int. Year being processed.
+        eng: Obj. Active database connection object connected to PostGIS.
 
     Returns
-        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of site
-        co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each site.
+        Tuple of (geo)dataframes (loc_gdf, df). 'loc_gdf' is a point geodataframe of
+        site co-ordinates in EPSG 25833; 'df' is a dataframe of discharges from each
+        site.
 
     Raises
         TypeError if 'data_fold' is not a string.
@@ -1591,7 +1536,7 @@ def read_large_wastewater_and_industry_data(data_fold, year, eng):
 
 def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     """
-    Reads raw small wastewater data from an Excel file and processes it.
+    Reads raw "small" wastewater data from an Excel file and processes it.
 
     Args
         xl_path: Str. Path to the Excel file.
@@ -1601,6 +1546,11 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
 
     Returns
         pd.DataFrame: Processed data.
+
+    Raises
+     TypeError if 'xl_path' is not a string.
+     TypeError if 'sheet_name' is not a string.
+     TypeError if 'year' is not an integer.
     """
     if not isinstance(xl_path, str):
         raise TypeError("'xl_path' must be a valid file path.")
@@ -1633,7 +1583,7 @@ def read_raw_small_wastewater_data(xl_path, sheet_name, year, eng):
     assert df[
         "komnr"
     ].is_unique, f"Dataset contains duplicated kommuner: {list(df['komnr'].unique())}"
-    df["komnr"].replace({"1245": "1246"}, inplace=True)
+    df["komnr"] = df["komnr"].replace({"1245": "1246"})
     df = df.groupby("komnr").sum(numeric_only=True).reset_index()
 
     # Tidy
@@ -1668,11 +1618,6 @@ def restructure_small_wastewater_data(df):
     df["variable"] = df["variable"].str.replace("BOF5", "BOF5_kg")
     df["variable"] = df["variable"].str.replace("SS", "SS_kg")
     df[["variable", "type"]] = df["variable"].str.split("-", n=1, expand=True)
-
-    # Ignore 'Tett tank (for alt avløpsvann)' as it is always zero (it's transported to the
-    # "large" plants)
-    df = df.query("type != 'Tett tank (for alt avløpsvann)'")
-
     df.set_index(["komnr", "variable", "sector", "type"], inplace=True)
     df = df.unstack("variable")
     df.columns = df.columns.get_level_values(1)
@@ -1683,7 +1628,8 @@ def restructure_small_wastewater_data(df):
 
 
 def check_komnrs_in_ssb_data(df, reg_kom_df):
-    """Check that the kommuner IDs in the SSB data are all present in the regine spatial dataset."""
+    """Check that the kommuner IDs in the SSB data are all present in the regine
+    spatial dataset."""
     not_in_db = set(df["komnr"].values) - set(reg_kom_df["komnr"].values)
     if len(not_in_db) > 0:
         print(len(not_in_db), 'kommuner are not in the TEOTIL "regine" dataset.')
