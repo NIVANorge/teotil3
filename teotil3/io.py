@@ -978,6 +978,7 @@ def assign_spredt_to_regines(
         "tdp_kg",
         "tpp_kg",
         "toc_kg",
+        "ss_kg",
     ],
 ):
     """Kommune level totals for spredt in 'spr_df' area are assigned to regines in 'reg_gdf'. Spredt
