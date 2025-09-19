@@ -898,7 +898,7 @@ def get_aquaculture_biomass_previous_month(row, df):
     else:
         try:
             # Returns a KeyError if data for (mon - 1) do not exist
-            return df.loc[(loc, mon - 1, spec)]["biomass_kg"]
+            return df.loc[(loc, sec, typ, mon - 1, spec)]["biomass_kg"]
 
         except KeyError:
             return 0
