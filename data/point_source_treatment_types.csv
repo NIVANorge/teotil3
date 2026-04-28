@@ -20,18 +20,24 @@ Small wastewater,Tett tank for svartvann,0.2,0.8,0.35,0.65,0.23,0.6
 Small wastewater,Biologisk toalett,0.2,0.8,0.35,0.65,0.23,0.6
 Small wastewater,Konstruert våtmark,0.9,0.1,0.66,0.34,0.32,1.8
 Small wastewater,"Tett tank for svartvann, gråvannsfilter",0.3,0.7,0.66,0.34,0.38,1.8
-Small wastewater,"Tett tank (for alt avløpsvann)",0.65,0.35,0.67,0.33,0.23,0.6
+Small wastewater,Tett tank (for alt avløpsvann),0.65,0.35,0.67,0.33,0.23,0.6
 Small wastewater,"Biologisk toalett, gråvannsfilter",0.3,0.7,0.66,0.34,0.38,1.8
 Small wastewater,Annen løsning,0.62,0.38,0.62,0.38,0.31,1.3
 Industry,Annen aktivitet,0.0,1.0,0.5,0.5,0.15,0.5
+Industry,Asfaltverk,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,"Avfall - mottak, mellomlagring og sortering",0.5,0.5,0.5,0.5,0.2,0.5
 Industry,Avfallsforbrenning,1.0,0.0,0.5,0.5,0.2,0.5
+Industry,Betongproduksjon,1.0,0.0,1.0,0.0,0.2,0.5
+Industry,Biogassanlegg,0.5,0.5,0.5,0.5,0.2,0.5
 Industry,Brannøvingsplass,0.5,0.5,0.5,0.5,0.2,0.5
 Industry,Farlig avfall - behandling,1.0,0.0,0.5,0.5,0.23,0.3
+Industry,Farlig avfall - mottak og mellomlagring,0.5,0.5,0.5,0.5,0.2,0.5
 Industry,Fiskeforedling,0.0,1.0,0.5,0.5,0.2,0.4
 Industry,Flyplass,0.5,0.5,0.5,0.5,0.33,0.5
 Industry,Forbrenningsanlegg for rene brensler,0.5,0.5,0.5,0.5,0.2,0.5
 Industry,Fôrproduksjon,0.0,1.0,0.5,0.5,0.24,1.1
 Industry,Gjenvinning av metall- og EE-avfall,0.5,0.5,0.5,0.5,0.2,0.5
+Industry,Industrideponering,0.5,0.5,0.5,0.5,0.2,0.5
 Industry,Kjemisk industri,0.1,0.9,0.5,0.5,0.2,0.5
 Industry,Kjemisk/elektrolytisk overflatebehandling,0.1,0.9,0.5,0.5,0.2,0.5
 Industry,Krematorium,0.5,0.5,0.5,0.5,0.2,0.5
@@ -50,3 +56,4 @@ Industry,"Tekstil-, skinn- og tauprodukter",1.0,0.0,0.5,0.5,0.2,0.5
 Industry,Treforedling,0.3,0.7,0.5,0.5,0.2,0.5
 Industry,Vaskeri og renseri,0.5,0.5,0.5,0.5,0.2,0.5
 Aquaculture,Fiskeoppdrett i sjøvann,0.69,0.31,0.71,0.29,,
+,,,,,,,
